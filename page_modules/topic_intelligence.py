@@ -8,7 +8,13 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from collections import Counter
-from utils import get_trending_topics, get_topics_by_sentiment, get_sentiment_color, data_source_badge
+from utils import (
+    get_trending_topics,
+    get_topics_by_sentiment,
+    get_sentiment_color,
+    data_source_badge,
+    parse_lessons_learned,
+)
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from io import BytesIO
@@ -611,53 +617,118 @@ def render(filtered_df, full_df):
                 
                 # Show all reviews
                 st.markdown(f"**All Reviews Mentioning This Topic** ({len(topic_reviews)} reviews)")
-                
-                for idx, row in topic_reviews.iterrows():
-                    with st.expander(f"{row['Product']} - {row['Review Date']} - Rating: {row['Overall User Rating']}/5"):
-                        st.markdown(f"**Headline:** {row['Headline']}")
-                        
-                        st.markdown("---")
-                        st.markdown("**Overall Comment:**")
-                        st.markdown(row['Overall Comment'])
-                        
-                        if pd.notna(row.get('Lessons Learned')):
-                            st.markdown("---")
-                            st.markdown("**Lessons Learned:**")
-                            st.markdown(row['Lessons Learned'])
-                        
-                        st.markdown("---")
-                        st.markdown("**Reviewer Information:**")
-                        st.markdown(f"- **Role:** {row['Reviewer Role ']}")
-                        st.markdown(f"- **Industry:** {row['Reviewer Industry']}")
-                        st.markdown(f"- **Company Size:** {row['Reviewer Firm Size']}")
-                        st.markdown(f"- **Country:** {row['Country']}")
-                        
-                        # Show dimension scores for this review
-                        st.markdown("---")
-                        st.markdown("**AI Sentiment Dimension Scores:**")
-                        score_cols = st.columns(5)
+
+                # Sort reviews by rating ascending (surface problem areas first)
+                topic_reviews_sorted = topic_reviews.sort_values(by='Overall User Rating', ascending=True)
+
+                for idx, row in topic_reviews_sorted.iterrows():
+                    overall_rating = row.get('Overall User Rating', pd.NA)
+                    rating_value = overall_rating if pd.notna(overall_rating) else 'N/A'
+                    date_value = row.get('parsed_date') if 'parsed_date' in row else pd.NaT
+                    if pd.isna(date_value):
+                        # Fall back to raw review date if parsed not available
+                        raw_date = row.get('Review Date')
+                        date_str = str(raw_date) if pd.notna(raw_date) else 'Date N/A'
+                    else:
+                        date_str = date_value.strftime('%b %d, %Y')
+
+                    headline = row.get('Headline')
+                    if not pd.notna(headline) or not str(headline).strip():
+                        comment_text = str(row.get('Overall Comment', '')).strip()
+                        if comment_text:
+                            first_sentence = comment_text.split('.')[0][:70].strip()
+                            headline = first_sentence + ('...' if len(comment_text) > len(first_sentence) else '')
+                        else:
+                            headline = f"{row.get('Product', 'Product')} Review"
+
+                    reviewer_role = row.get('Reviewer Role ', 'Role N/A')
+                    reviewer_industry = row.get('Reviewer Industry', 'Industry N/A')
+                    reviewer_size = row.get('Reviewer Firm Size', 'Company size N/A')
+                    reviewer_country = row.get('Country', 'Country N/A')
+
+                    # Determine styling icon based on rating
+                    if pd.notna(overall_rating):
+                        if overall_rating <= 3:
+                            header_icon = '🔴'
+                        elif overall_rating < 4:
+                            header_icon = '🟡'
+                        else:
+                            header_icon = '🟢'
+                    else:
+                        header_icon = '🛈'
+
+                    expander_label = f"{header_icon} {headline} | {row.get('Product', 'Product')} | ⭐ {rating_value}/5 | {date_str}"
+
+                    with st.expander(expander_label):
+                        col_meta1, col_meta2 = st.columns(2)
+                        with col_meta1:
+                            st.markdown("**Reviewer Profile**")
+                            st.markdown(f"- Role: {reviewer_role if pd.notna(reviewer_role) else 'Role N/A'}")
+                            st.markdown(f"- Industry: {reviewer_industry if pd.notna(reviewer_industry) else 'Industry N/A'}")
+                            st.markdown(f"- Company Size: {reviewer_size if pd.notna(reviewer_size) else 'Company size N/A'}")
+                            st.markdown(f"- Country: {reviewer_country if pd.notna(reviewer_country) else 'Country N/A'}")
+
+                        with col_meta2:
+                            st.markdown("**Review Details**")
+                            st.markdown(f"- Product: {row.get('Product', 'N/A')}")
+                            st.markdown(f"- Review Date: {date_str}")
+                            if pd.notna(overall_rating):
+                                st.markdown(f"- Overall Rating: ⭐ {overall_rating}/5")
+                            review_url = row.get('Review URL')
+                            if review_url and pd.notna(review_url):
+                                st.markdown(f"- [View Original Review]({review_url})")
+
+                        # Review narrative
+                        comment_text = row.get('Overall Comment')
+                        if pd.notna(comment_text) and str(comment_text).strip():
+                            st.markdown("**💬 Full Review Comment**")
+                            st.markdown(f"*{comment_text}*")
+
+                        # Lessons learned parsed into likes/dislikes
+                        lessons_raw = row.get('Lessons Learned')
+                        if pd.notna(lessons_raw) and str(lessons_raw).strip():
+                            lessons = parse_lessons_learned(lessons_raw)
+                            if lessons['likes'] or lessons['dislikes']:
+                                st.markdown("**📚 Lessons Learned (from reviewer)**")
+                                if lessons['likes']:
+                                    st.markdown("**👍 What they like most:**")
+                                    st.success(lessons['likes'])
+                                if lessons['dislikes']:
+                                    st.markdown("**👎 What they dislike most:**")
+                                    st.warning(lessons['dislikes'])
+
+                        # Topics associated with this review
+                        topics_for_review = row.get('topics_list', [])
+                        if topics_for_review:
+                            st.markdown("**🏷️ Topics Highlighted in this Review**")
+                            st.markdown(", ".join(sorted(set(topics_for_review))))
+
+                        # Dimension scores
+                        st.markdown("**📈 AI Sentiment Dimension Scores**")
+                        dim_cols = st.columns(len(dimensions))
                         for i, dim in enumerate(dimensions):
-                            with score_cols[i]:
-                                st.metric(dimension_labels[dim], f"{row[dim]}")
-                        
-                        # Show Gartner ratings if available
+                            with dim_cols[i]:
+                                score_val = row.get(dim)
+                                display_val = f"{score_val:.2f}" if pd.notna(score_val) else "N/A"
+                                st.metric(dimension_labels[dim], display_val)
+
+                        # Gartner category ratings if available
                         gartner_ratings = []
                         if pd.notna(row.get('Evaluation & Contracting')):
-                            gartner_ratings.append(f"Evaluation & Contracting: {row['Evaluation & Contracting']}")
+                            gartner_ratings.append(f"Evaluation & Contracting: {row['Evaluation & Contracting']}/5")
                         if pd.notna(row.get('Integration & Deployment')):
-                            gartner_ratings.append(f"Integration & Deployment: {row['Integration & Deployment']}")
+                            gartner_ratings.append(f"Integration & Deployment: {row['Integration & Deployment']}/5")
                         if pd.notna(row.get('Service & Support')):
-                            gartner_ratings.append(f"Service & Support: {row['Service & Support']}")
+                            gartner_ratings.append(f"Service & Support: {row['Service & Support']}/5")
                         if pd.notna(row.get('Product Capabilities')):
-                            gartner_ratings.append(f"Product Capabilities: {row['Product Capabilities']}")
-                        
+                            gartner_ratings.append(f"Product Capabilities: {row['Product Capabilities']}/5")
+
                         if gartner_ratings:
-                            st.markdown("---")
-                            st.markdown("**Gartner Category Ratings (Reviewer Ratings):**")
+                            st.markdown("**🏅 Gartner Category Ratings (Reviewer)**")
                             for rating in gartner_ratings:
-                                st.markdown(f"- {rating}/5")
-                else:
-                    st.info(f"No reviews found mentioning '{selected_topic}' in the current selection.")
+                                st.markdown(f"- {rating}")
             else:
-                st.info("No topics available for deep dive analysis.")
+                st.info(f"No reviews found mentioning '{selected_topic}' in the current selection.")
+        else:
+            st.info("No topics available for deep dive analysis.")
 
