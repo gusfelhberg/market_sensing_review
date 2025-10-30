@@ -87,37 +87,64 @@ def render(filtered_df, full_df):
     with col_left:
         st.subheader("📊 Sentiment Trends Over Time")
         
-        # Prepare data for time series
-        trend_df = filtered_df.copy()
-        trend_df['Month'] = trend_df['parsed_date'].dt.to_period('M').astype(str)
-        
-        # Aggregate by month
-        monthly_avg = trend_df.groupby('Month')[dimensions].mean().reset_index()
-        
-        # Create line chart
-        fig = go.Figure()
-        
-        for dim in dimensions:
-            fig.add_trace(go.Scatter(
-                x=monthly_avg['Month'],
-                y=monthly_avg[dim],
-                mode='lines+markers',
-                name=dimension_labels[dim],
-                line=dict(width=3),
-                marker=dict(size=8)
-            ))
-        
-        fig.update_layout(
-            title="Average AI Sentiment Scores by Month",
-            xaxis_title="Month",
-            yaxis_title="AI Sentiment Score (1-5)",
-            yaxis=dict(range=[0, 5]),
-            hovermode='x unified',
-            height=400,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        # Product selector for trend chart
+        available_products = ['All Products'] + sorted(filtered_df['Product'].unique().tolist())
+        selected_trend_product = st.selectbox(
+            "Select Product for Trend",
+            options=available_products,
+            index=0,
+            key='trend_product_selector'
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        # Filter data based on selection
+        if selected_trend_product == 'All Products':
+            trend_df = filtered_df.copy()
+            chart_title_prefix = "All Products"
+        else:
+            trend_df = filtered_df[filtered_df['Product'] == selected_trend_product].copy()
+            chart_title_prefix = selected_trend_product
+        
+        if len(trend_df) == 0:
+            st.warning(f"⚠️ No reviews for {selected_trend_product} in current selection.")
+        else:
+            trend_df['Month'] = trend_df['parsed_date'].dt.to_period('M').astype(str)
+            
+            # Aggregate by month
+            monthly_avg = trend_df.groupby('Month')[dimensions].mean().reset_index()
+            
+            # Convert Month string back to datetime for proper time-series display
+            monthly_avg['Month_dt'] = pd.to_datetime(monthly_avg['Month'].astype(str) + '-01')
+            
+            # Create line chart with proper datetime axis and consistent colors
+            from utils import get_dimension_color
+            fig = go.Figure()
+            
+            for dim in dimensions:
+                fig.add_trace(go.Scatter(
+                    x=monthly_avg['Month_dt'],
+                    y=monthly_avg[dim],
+                    mode='lines+markers',
+                    name=dimension_labels[dim],
+                    line=dict(width=3, color=get_dimension_color(dim)),
+                    marker=dict(size=8, color=get_dimension_color(dim)),
+                    connectgaps=False  # Don't interpolate missing months
+                ))
+            
+            fig.update_layout(
+                title=f"{chart_title_prefix} - AI Sentiment Scores by Month",
+                xaxis_title="Month",
+                yaxis_title="AI Sentiment Score (1-5)",
+                yaxis=dict(range=[0, 5]),
+                hovermode='x unified',
+                height=400,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis=dict(
+                    tickformat='%b %Y',
+                    tickmode='auto'
+                )
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
         
         # Review Distribution
         st.subheader("📝 Review Distribution")

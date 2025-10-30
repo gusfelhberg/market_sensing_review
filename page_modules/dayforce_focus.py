@@ -8,7 +8,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from utils import get_sentiment_color, get_sentiment_label, extract_pain_points, data_source_badge
+from utils import get_sentiment_color, get_sentiment_label, extract_pain_points, data_source_badge, parse_lessons_learned
 from collections import Counter
 
 def render(filtered_df, full_df):
@@ -80,6 +80,14 @@ def render(filtered_df, full_df):
         st.subheader("📈 Dayforce vs Competition")
         st.caption(data_source_badge('ai_analysis'))
         
+        # Add view selector
+        view_mode = st.radio(
+            "View by:",
+            options=["By Dimension", "By Product"],
+            horizontal=True,
+            key='dayforce_chart_view'
+        )
+        
         # Calculate averages by product
         product_scores = []
         for product in filtered_df['Product'].unique():
@@ -96,31 +104,48 @@ def render(filtered_df, full_df):
         
         comp_df = pd.DataFrame(product_scores)
         
-        # Create grouped bar chart
+        # Create grouped bar chart with consistent colors
+        from utils import get_dimension_color, get_product_color
         fig = go.Figure()
         
-        for dim in dimensions:
-            # Separate Dayforce from competitors
-            dayforce_row = comp_df[comp_df['Is Dayforce']]
-            competitor_rows = comp_df[~comp_df['Is Dayforce']].sort_values(dim, ascending=False)
+        if view_mode == "By Dimension":
+            # Group by dimension - each dimension shows all products
+            for dim in dimensions:
+                fig.add_trace(go.Bar(
+                    name=dimension_labels[dim],
+                    x=comp_df['Product'],
+                    y=comp_df[dim],
+                    marker_color=get_dimension_color(dim),
+                    showlegend=True
+                ))
             
-            all_products = list(competitor_rows['Product']) + [''] + list(dayforce_row['Product'])
-            all_scores = list(competitor_rows[dim]) + [None] + list(dayforce_row[dim])
+            fig.update_layout(
+                title="AI Sentiment Performance - Grouped by Dimension",
+                xaxis_title="Product"
+            )
+        else:
+            # Group by product - each product shows all dimensions
+            # Use distinct product colors for legend/identification
+            for idx, row in comp_df.iterrows():
+                product = row['Product']
+                scores = [row[dim] for dim in dimensions]
+                
+                fig.add_trace(go.Bar(
+                    name=product,
+                    x=[dimension_labels[dim] for dim in dimensions],
+                    y=scores,
+                    marker_color=get_product_color(product),
+                    showlegend=True,
+                    hovertemplate='<b>%{fullData.name}</b><br>%{x}<br>Score: %{y:.2f}<extra></extra>'
+                ))
             
-            colors = ['lightgray'] * len(competitor_rows) + ['white'] + ['#0c5460']
-            
-            fig.add_trace(go.Bar(
-                name=dimension_labels[dim],
-                x=all_products,
-                y=all_scores,
-                marker_color=colors if dim == dimensions[0] else None,
-                showlegend=True
-            ))
+            fig.update_layout(
+                title="AI Sentiment Performance - Grouped by Product",
+                xaxis_title="Dimension"
+            )
         
         fig.update_layout(
-            title="AI Sentiment Performance Across All Dimensions (Dayforce Highlighted)",
             yaxis_title="AI Sentiment Score (1-5)",
-            xaxis_title="Product",
             barmode='group',
             yaxis=dict(range=[0, 5.5]),
             height=400,
@@ -255,57 +280,208 @@ def render(filtered_df, full_df):
     st.subheader("🔍 Deep Dive: Dayforce Feedback Analysis")
     st.caption(data_source_badge('ai_analysis'))
     
-    tab1, tab2, tab3 = st.tabs(["Pain Points", "Strengths", "Competitive Gaps"])
+    tab1, tab2, tab3 = st.tabs(["Customer Pain Points", "Customer Strengths", "Competitive Intelligence"])
     
     with tab1:
-        st.markdown("### 😣 Customer Pain Points")
-        st.markdown("*What are Dayforce customers struggling with?*")
+        st.markdown("### 😣 Critical Issues from Customer Reviews")
+        st.markdown("*Each issue is linked to a specific customer review with actionable details*")
         
         pain_points = extract_pain_points(dayforce_df, 'Dayforce')
         
         if pain_points:
             # Categorize by severity
-            high_sev = [p for p in pain_points if p['overall_rating'] <= 3]
-            med_sev = [p for p in pain_points if 3 < p['overall_rating'] < 4]
-            low_sev = [p for p in pain_points if p['overall_rating'] >= 4]
+            critical = [p for p in pain_points if p['overall_rating'] <= 3]
+            moderate = [p for p in pain_points if 3 < p['overall_rating'] < 4]
+            minor = [p for p in pain_points if p['overall_rating'] >= 4]
             
-            col_sev1, col_sev2, col_sev3 = st.columns(3)
-            with col_sev1:
-                st.metric("🔴 Critical", len(high_sev), help="From reviews rated ≤3")
-            with col_sev2:
-                st.metric("🟡 Moderate", len(med_sev), help="From reviews rated 3-4")
-            with col_sev3:
-                st.metric("🟢 Minor", len(low_sev), help="From reviews rated ≥4")
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("🔴 Critical", len(critical), help="Reviews rated ≤3.0")
+            with col2:
+                st.metric("🟡 Moderate", len(moderate), help="Reviews rated 3.0-4.0")
+            with col3:
+                st.metric("🟢 Minor", len(minor), help="Reviews rated ≥4.0")
+            with col4:
+                # Most common failing sub-dimension
+                all_failing_dims = []
+                for p in pain_points:
+                    all_failing_dims.extend(p['low_sub_dimensions'].keys())
+                if all_failing_dims:
+                    most_common = Counter(all_failing_dims).most_common(1)[0]
+                    st.metric("Top Issue", most_common[0], help=f"Mentioned in {most_common[1]} reviews")
             
-            # Show critical pain points
-            if high_sev:
-                st.markdown("#### 🔴 Critical Issues (Immediate Attention Required)")
-                for i, pain in enumerate(high_sev[:5], 1):
-                    date_str = pain['date'].strftime('%Y-%m-%d') if pd.notna(pain['date']) else 'N/A'
-                    st.markdown(f"""
-                    <div style="background-color: #f8d7da; padding: 15px; margin: 10px 0; 
-                                border-radius: 5px; border-left: 4px solid #dc3545;">
-                        <strong>#{i}.</strong> {pain['pain_point'][:250]}<br/>
-                        <small>📅 {date_str} | ⭐ {pain['overall_rating']}/5</small>
-                    </div>
-                    """, unsafe_allow_html=True)
+            st.markdown("---")
             
-            # Show moderate pain points
-            if med_sev:
-                st.markdown("#### 🟡 Moderate Issues")
-                for i, pain in enumerate(med_sev[:3], 1):
-                    date_str = pain['date'].strftime('%Y-%m-%d') if pd.notna(pain['date']) else 'N/A'
-                    st.markdown(f"**{i}.** {pain['pain_point'][:200]}... *({date_str}, Rating: {pain['overall_rating']}/5)*")
+            # Critical Issues - Show full details
+            if critical:
+                st.markdown("#### 🔴 Critical Issues (Reviews rated ≤3.0)")
+                st.markdown("*These require immediate attention as they come from highly dissatisfied customers*")
+                
+                for i, pain in enumerate(critical, 1):
+                    date_str = pain['date'].strftime('%b %d, %Y') if pd.notna(pain['date']) else 'Date N/A'
+                    headline = pain['headline'] if pd.notna(pain['headline']) and str(pain['headline']).strip() else "Critical Review"
+                    
+                    with st.expander(f"🔴 #{i}. {headline} (Rating: {pain['overall_rating']}/5 | {date_str})"):
+                        # Review metadata
+                        col_meta1, col_meta2 = st.columns(2)
+                        with col_meta1:
+                            st.markdown(f"""
+                            **Reviewer Profile:**
+                            - Role: {pain['reviewer_role'] if pd.notna(pain['reviewer_role']) else 'N/A'}
+                            - Industry: {pain['reviewer_industry'] if pd.notna(pain['reviewer_industry']) else 'N/A'}
+                            - Company Size: {pain['reviewer_firm_size'] if pd.notna(pain['reviewer_firm_size']) else 'N/A'}
+                            """)
+                        with col_meta2:
+                            st.markdown(f"""
+                            **Review Details:**
+                            - Overall Rating: ⭐ {pain['overall_rating']}/5
+                            - Date: {date_str}
+                            - [View Original Review]({pain['review_url']})
+                            """)
+                        
+                        # Failing sub-dimensions
+                        st.markdown("**📉 Sub-Dimensions with Low Scores:**")
+                        dim_cols = st.columns(min(3, len(pain['low_sub_dimensions'])))
+                        for idx, (dim, score) in enumerate(pain['low_sub_dimensions'].items()):
+                            with dim_cols[idx % 3]:
+                                color = "#dc3545" if score < 2.5 else "#ffc107"
+                                st.markdown(f"""
+                                <div style="background-color: {color}22; padding: 8px; margin: 4px 0; 
+                                            border-radius: 4px; border-left: 3px solid {color};">
+                                    <strong>{dim}</strong><br/>
+                                    Score: {score:.1f}/5.0
+                                </div>
+                                """, unsafe_allow_html=True)
+                        
+                        # AI-extracted pain points
+                        if pain['ai_pain_points'] and str(pain['ai_pain_points']).strip():
+                            st.markdown("**🤖 AI-Extracted Key Issues:**")
+                            st.markdown(f"> {pain['ai_pain_points']}")
+                        
+                        # Related topics
+                        if pain['related_topics']:
+                            st.markdown(f"**🏷️ Related Topics:** {', '.join(pain['related_topics'][:5])}")
+                        
+                        # Full review text
+                        if pain['overall_comment'] and pd.notna(pain['overall_comment']):
+                            st.markdown("**💬 Full Review Comment:**")
+                            st.markdown(f"*{pain['overall_comment']}*")
+                        
+                        # Lessons learned - parsed into likes and dislikes
+                        if pain['lessons_learned'] and pd.notna(pain['lessons_learned']):
+                            lessons = parse_lessons_learned(pain['lessons_learned'])
+                            st.markdown("**📚 Lessons Learned (from reviewer):**")
+                            
+                            if lessons['likes']:
+                                st.markdown("**👍 What they like most:**")
+                                st.success(lessons['likes'])
+                            
+                            if lessons['dislikes']:
+                                st.markdown("**👎 What they dislike most:**")
+                                st.warning(lessons['dislikes'])
+            
+            # Moderate Issues - Summary view
+            if moderate:
+                st.markdown("---")
+                st.markdown("#### 🟡 Moderate Issues (Reviews rated 3.0-4.0)")
+                
+                for i, pain in enumerate(moderate[:5], 1):
+                    date_str = pain['date'].strftime('%b %d, %Y') if pd.notna(pain['date']) else 'Date N/A'
+                    headline = pain['headline'] if pd.notna(pain['headline']) and str(pain['headline']).strip() else "Moderate Concern"
+                    
+                    # Get top 2 failing dimensions
+                    top_issues = list(pain['low_sub_dimensions'].items())[:2]
+                    issues_str = ', '.join([f"{dim} ({score:.1f})" for dim, score in top_issues])
+                    
+                    with st.expander(f"🟡 {headline} ({date_str}) - Rating: {pain['overall_rating']}/5"):
+                        st.markdown(f"**Key Issues:** {issues_str}")
+                        if pain['ai_pain_points']:
+                            st.markdown(f"**Details:** {pain['ai_pain_points']}")
+                        if pain['review_url']:
+                            st.markdown(f"[View Full Review]({pain['review_url']})")
+                
+                if len(moderate) > 5:
+                    st.info(f"Showing 5 of {len(moderate)} moderate issues. Expand sections above for details.")
+            
+            # Analysis by sub-dimension
+            st.markdown("---")
+            st.markdown("#### 📊 Pain Points by Sub-Dimension")
+            
+            # Count issues by sub-dimension
+            dim_issues = {}
+            for pain in pain_points:
+                for dim, score in pain['low_sub_dimensions'].items():
+                    if dim not in dim_issues:
+                        dim_issues[dim] = []
+                    dim_issues[dim].append({
+                        'score': score,
+                        'rating': pain['overall_rating'],
+                        'headline': pain['headline']
+                    })
+            
+            # Sort by frequency
+            dim_issues_sorted = sorted(dim_issues.items(), key=lambda x: len(x[1]), reverse=True)
+            
+            for dim, issues in dim_issues_sorted[:5]:
+                avg_score = sum(i['score'] for i in issues) / len(issues)
+                with st.expander(f"{dim} - {len(issues)} issues (Avg Score: {avg_score:.1f}/5.0)"):
+                    for issue in issues[:3]:
+                        st.markdown(f"- {issue['headline']} (Score: {issue['score']:.1f}, Overall Rating: {issue['rating']}/5)")
+                    if len(issues) > 3:
+                        st.markdown(f"*...and {len(issues)-3} more issues*")
         else:
-            st.info("No pain points found in current selection")
+            st.success("✅ No significant pain points found! All reviews show healthy sub-dimension scores.")
     
     with tab2:
         st.markdown("### ✨ What Customers Love About Dayforce")
+        st.markdown("*Detailed analysis of positive feedback with specific sub-dimension strengths*")
         
-        # Extract positive comments
+        # Extract positive reviews (4+ rating) and high-scoring sub-dimensions (4.0+)
         positive_reviews = dayforce_df[dayforce_df['Overall User Rating'] >= 4]
         
         if len(positive_reviews) > 0:
+            # Define sub-dimensions with readable names
+            sub_dimensions = {
+                'degree_of_meeting_functional_requirements': 'Functional Requirements',
+                'product_functionality': 'Product Functionality',
+                'quality_of_product_user_experience': 'User Experience',
+                'quality_of_the_evaluation_and_contracting_process': 'Evaluation & Contracting',
+                'pricing_and_packaging_clarity': 'Pricing Clarity',
+                'value_for_money': 'Value for Money',
+                'fit_of_product_strategy_to_market_needs': 'Market Strategy Fit',
+                'clarity_of_product_roadmap': 'Roadmap Clarity',
+                'extent_of_planned_product_innovation': 'Innovation Plans',
+                'ease_and_quality_of_integration_and_deployment': 'Integration & Deployment',
+                'quality_of_user_training_and_post_go_live_support': 'Training & Support',
+                'implementation_cost': 'Implementation Cost',
+                'quality_and_timeliness_of_support': 'Support Quality',
+                'customer_success_management_and_value_realization': 'Customer Success',
+                'customer_community': 'Customer Community'
+            }
+            
+            # Summary metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("⭐ Highly Satisfied", len(positive_reviews), 
+                         help="Reviews with 4+ overall rating")
+            with col2:
+                avg_rating = positive_reviews['Overall User Rating'].mean()
+                st.metric("Average Rating", f"{avg_rating:.2f}/5.0")
+            with col3:
+                # Find most praised sub-dimension
+                sub_dim_avgs = {}
+                for col, name in sub_dimensions.items():
+                    if col in positive_reviews.columns:
+                        avg = positive_reviews[col].mean()
+                        sub_dim_avgs[name] = avg
+                if sub_dim_avgs:
+                    top_dim = max(sub_dim_avgs.items(), key=lambda x: x[1])
+                    st.metric("Top Sub-Dimension", top_dim[0][:20], 
+                             help=f"Score: {top_dim[1]:.2f}/5.0")
+            
+            st.markdown("---")
+            
             # Extract topics from positive reviews
             topics = []
             for topics_list in positive_reviews['topics_list']:
@@ -317,70 +493,236 @@ def render(filtered_df, full_df):
             col_top1, col_top2 = st.columns(2)
             
             with col_top1:
-                st.markdown("**Most Praised Features:**")
-                for topic, count in top_topics[:5]:
+                st.markdown("**📌 Most Praised Features/Topics:**")
+                for topic, count in top_topics[:7]:
                     pct = count / len(positive_reviews) * 100
                     st.markdown(f"- **{topic}** ({count} mentions, {pct:.0f}%)")
             
             with col_top2:
                 # Dimension strengths
-                st.markdown("**Strongest Dimensions:**")
+                st.markdown("**📈 Strongest Dimensions (AI Scores):**")
                 dim_scores = positive_reviews[dimensions].mean().sort_values(ascending=False)
                 for dim, score in dim_scores.items():
                     st.markdown(f"- **{dimension_labels[dim]}**: {score:.2f}/5.0")
             
             st.markdown("---")
-            st.markdown("**Sample Positive Feedback:**")
+            st.markdown("#### 🌟 Featured Positive Reviews")
             
-            for idx, row in positive_reviews.nlargest(3, 'Overall User Rating').iterrows():
-                st.markdown(f"""
-                <div style="background-color: #d4edda; padding: 15px; margin: 10px 0; 
-                            border-radius: 5px; border-left: 4px solid #28a745;">
-                    <strong>"{row['Headline']}"</strong><br/>
-                    {row['Overall Comment'][:300]}...<br/>
-                    <small>⭐ {row['Overall User Rating']}/5 | {row['Reviewer Role ']} | {row['Reviewer Industry']}</small>
-                </div>
-                """, unsafe_allow_html=True)
+            # Show top 5 positive reviews with full details
+            for i, (idx, row) in enumerate(positive_reviews.nlargest(5, 'Overall User Rating').iterrows(), 1):
+                headline = row['Headline'] if pd.notna(row['Headline']) and str(row['Headline']).strip() else "Highly Satisfied Customer"
+                date_str = row['parsed_date'].strftime('%b %d, %Y') if pd.notna(row['parsed_date']) else 'Date N/A'
+                
+                with st.expander(f"⭐ #{i}. {headline} (Rating: {row['Overall User Rating']}/5 | {date_str})"):
+                    # Review metadata
+                    col_meta1, col_meta2 = st.columns(2)
+                    with col_meta1:
+                        st.markdown(f"""
+                        **Reviewer Profile:**
+                        - Role: {row['Reviewer Role '] if pd.notna(row['Reviewer Role ']) else 'N/A'}
+                        - Industry: {row['Reviewer Industry'] if pd.notna(row['Reviewer Industry']) else 'N/A'}
+                        - Company Size: {row['Reviewer Firm Size'] if pd.notna(row['Reviewer Firm Size']) else 'N/A'}
+                        """)
+                    with col_meta2:
+                        st.markdown(f"""
+                        **Review Details:**
+                        - Overall Rating: ⭐ {row['Overall User Rating']}/5
+                        - Date: {date_str}
+                        - [View Original Review]({row['Review URL']})
+                        """)
+                    
+                    # High-scoring sub-dimensions
+                    high_scores = {}
+                    for col, name in sub_dimensions.items():
+                        if col in row.index:
+                            score = row[col]
+                            if pd.notna(score) and score >= 4.0:
+                                high_scores[name] = score
+                    
+                    if high_scores:
+                        st.markdown("**📊 Top-Rated Sub-Dimensions:**")
+                        # Sort by score
+                        sorted_scores = sorted(high_scores.items(), key=lambda x: x[1], reverse=True)
+                        dim_cols = st.columns(min(3, len(sorted_scores)))
+                        for idx_dim, (dim, score) in enumerate(sorted_scores[:6]):
+                            with dim_cols[idx_dim % 3]:
+                                st.markdown(f"""
+                                <div style="background-color: #d4edda; padding: 8px; margin: 4px 0; 
+                                            border-radius: 4px; border-left: 3px solid #28a745;">
+                                    <strong>{dim}</strong><br/>
+                                    Score: {score:.1f}/5.0
+                                </div>
+                                """, unsafe_allow_html=True)
+                    
+                    # AI insights
+                    ai_parsed = row.get('ai_parsed', {})
+                    if isinstance(ai_parsed, dict) and ai_parsed.get('review_insights'):
+                        st.markdown("**🤖 AI-Extracted Insights:**")
+                        st.markdown(f"> {ai_parsed['review_insights']}")
+                    
+                    # Full review text
+                    if pd.notna(row['Overall Comment']):
+                        st.markdown("**💬 Full Review Comment:**")
+                        st.markdown(f"*{row['Overall Comment']}*")
+                    
+                    # Lessons learned - parsed into likes and dislikes
+                    if pd.notna(row['Lessons Learned']):
+                        lessons = parse_lessons_learned(row['Lessons Learned'])
+                        st.markdown("**📚 Lessons Learned (from reviewer):**")
+                        
+                        if lessons['likes']:
+                            st.markdown("**👍 What they like most:**")
+                            st.success(lessons['likes'])
+                        
+                        if lessons['dislikes']:
+                            st.markdown("**👎 What they dislike most:**")
+                            st.warning(lessons['dislikes'])
+            
+            # Analysis by sub-dimension excellence
+            st.markdown("---")
+            st.markdown("#### 🏆 Excellence by Sub-Dimension")
+            st.markdown("*Which sub-dimensions consistently receive high scores?*")
+            
+            # Calculate average scores for each sub-dimension
+            sub_dim_performance = {}
+            for col, name in sub_dimensions.items():
+                if col in positive_reviews.columns:
+                    # Only calculate if there are non-null values
+                    valid_scores = positive_reviews[col].dropna()
+                    if len(valid_scores) > 0:
+                        avg_score = valid_scores.mean()
+                        # Count high scores only from valid (non-null) scores
+                        high_count = len(valid_scores[valid_scores >= 4.5])
+                        sub_dim_performance[name] = {
+                            'avg': avg_score,
+                            'high_count': high_count,
+                            'total': len(valid_scores)  # Count only reviews with valid scores
+                        }
+            
+            # Sort by average score (only show if we have data)
+            if sub_dim_performance:
+                sorted_performance = sorted(sub_dim_performance.items(), 
+                                           key=lambda x: x[1]['avg'], 
+                                           reverse=True)
+                
+                for dim, perf in sorted_performance[:8]:
+                    pct = (perf['high_count'] / perf['total'] * 100) if perf['total'] > 0 else 0
+                    st.markdown(f"""
+                    <div style="background-color: #d4edda22; padding: 10px; margin: 5px 0; 
+                                border-radius: 5px; border-left: 3px solid #28a745;">
+                        <strong>{dim}</strong>: {perf['avg']:.2f}/5.0 average 
+                        ({perf['high_count']}/{perf['total']} reviews rated 4.5+, {pct:.0f}%)
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No sub-dimension scores available for analysis")
         else:
             st.info("No highly-rated reviews in current selection")
     
     with tab3:
-        st.markdown("### 🥊 Competitive Gap Analysis")
-        st.markdown("*What are competitors doing better?*")
+        st.markdown("### 🥊 Competitive Intelligence")
+        st.markdown("*Detailed analysis of where competitors excel - learn from their customer feedback*")
         
         # For each gap, show what competitors are doing well
         if gaps:
+            # Summary of gaps
+            st.markdown("**📊 Gap Summary:**")
+            gap_summary_cols = st.columns(len(gaps))
+            for idx, gap_item in enumerate(gaps):
+                with gap_summary_cols[idx]:
+                    st.metric(
+                        label=gap_item['dimension'].replace(' (AI)', ''),
+                        value=f"{gap_item['dayforce']:.2f}",
+                        delta=f"-{gap_item['gap']:.2f}",
+                        delta_color="inverse",
+                        help=f"{gap_item['competitor']} leads with {gap_item['comp_score']:.2f}"
+                    )
+            
+            st.markdown("---")
+            
             for gap_item in gaps:
                 dim = [k for k, v in dimension_labels.items() if v == gap_item['dimension']][0]
                 competitor = gap_item['competitor']
                 
-                with st.expander(f"{gap_item['dimension']}: {competitor} leads by {gap_item['gap']:.2f} points"):
-                    # Get competitor reviews for this dimension
-                    comp_reviews = competitors_df[
-                        (competitors_df['Product'] == competitor) &
-                        (competitors_df[dim] >= 4)
-                    ]
+                st.markdown(f"### {gap_item['dimension']}: {competitor} leads by {gap_item['gap']:.2f} points")
+                st.markdown(f"*{competitor}: {gap_item['comp_score']:.2f} | Dayforce: {gap_item['dayforce']:.2f}*")
+                
+                # Get competitor reviews for this dimension
+                comp_reviews = competitors_df[
+                    (competitors_df['Product'] == competitor) &
+                    (competitors_df[dim] >= 3.5)  # Show reviews with decent scores in this dimension
+                ].nlargest(5, dim)  # Top 5 reviews
+                
+                if len(comp_reviews) > 0:
+                    st.markdown(f"**🔍 Why {competitor} excels - Direct from customer reviews:**")
                     
-                    if len(comp_reviews) > 0:
-                        st.markdown(f"**Why {competitor} excels in {gap_item['dimension']}:**")
+                    # Show detailed competitor reviews
+                    for i, (idx, row) in enumerate(comp_reviews.iterrows(), 1):
+                        headline = row['Headline'] if pd.notna(row['Headline']) and str(row['Headline']).strip() else f"{competitor} Review"
+                        date_str = row['parsed_date'].strftime('%b %d, %Y') if pd.notna(row['parsed_date']) else 'Date N/A'
                         
-                        # Sample high-scoring competitor reviews
-                        for idx, row in comp_reviews.nlargest(2, dim).iterrows():
-                            st.markdown(f"""
-                            <div style="background-color: #fff3cd; padding: 12px; margin: 8px 0; 
-                                        border-radius: 5px; border-left: 3px solid #ffc107;">
-                                <strong>{row['Headline']}</strong><br/>
-                                {row['Overall Comment'][:200]}...<br/>
-                                <small>{dim.replace('_', ' ').title()} Score: {row[dim]}/5</small>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        st.markdown("**Action Items:**")
-                        st.markdown(generate_gap_closure_recommendations(gap_item['dimension'], competitor))
-                    else:
-                        st.info(f"No detailed feedback available for {competitor} in this dimension")
+                        with st.expander(f"📄 {competitor} Review #{i}: {headline} ({dim.replace('_', ' ').title()} Score: {row[dim]:.1f}/5)"):
+                            # Review metadata
+                            col_meta1, col_meta2 = st.columns(2)
+                            with col_meta1:
+                                st.markdown(f"""
+                                **Reviewer Profile:**
+                                - Role: {row['Reviewer Role '] if pd.notna(row['Reviewer Role ']) else 'N/A'}
+                                - Industry: {row['Reviewer Industry'] if pd.notna(row['Reviewer Industry']) else 'N/A'}
+                                - Company Size: {row['Reviewer Firm Size'] if pd.notna(row['Reviewer Firm Size']) else 'N/A'}
+                                """)
+                            with col_meta2:
+                                st.markdown(f"""
+                                **Review Metrics:**
+                                - Overall Rating: ⭐ {row['Overall User Rating']}/5
+                                - {dimension_labels[dim]}: {row[dim]:.1f}/5
+                                - Date: {date_str}
+                                - [View Original Review]({row['Review URL']})
+                                """)
+                            
+                            # AI insights from competitor review
+                            ai_parsed = row.get('ai_parsed', {})
+                            if isinstance(ai_parsed, dict):
+                                if ai_parsed.get('review_insights'):
+                                    st.markdown("**🤖 Key Insights:**")
+                                    st.markdown(f"> {ai_parsed['review_insights']}")
+                                
+                                if ai_parsed.get('reasoning'):
+                                    st.markdown("**💡 Why this matters:**")
+                                    st.markdown(f"> {ai_parsed['reasoning'][:300]}...")
+                            
+                            # Full comment
+                            if pd.notna(row['Overall Comment']):
+                                st.markdown("**💬 Full Review:**")
+                                st.info(row['Overall Comment'])
+                            
+                            # Topics discussed
+                            if row.get('topics_list'):
+                                topics = row['topics_list'][:8]
+                                st.markdown(f"**🏷️ Topics Discussed:** {', '.join(topics)}")
+                    
+                    # Compare Dayforce reviews in same dimension
+                    st.markdown(f"---")
+                    st.markdown(f"**📉 Dayforce Performance in {gap_item['dimension']}:**")
+                    
+                    dayforce_in_dim = dayforce_df[dayforce_df[dim].notna()].nsmallest(3, dim)
+                    
+                    if len(dayforce_in_dim) > 0:
+                        st.markdown("*Bottom 3 Dayforce reviews in this dimension:*")
+                        for idx, row in dayforce_in_dim.iterrows():
+                            headline = row['Headline'] if pd.notna(row['Headline']) and str(row['Headline']).strip() else "Dayforce Review"
+                            st.markdown(f"- **{headline}** - Score: {row[dim]:.1f}/5, Overall: {row['Overall User Rating']}/5")
+                    
+                    st.markdown("---")
+                    st.markdown("**💡 Strategic Action Items:**")
+                    st.markdown(generate_gap_closure_recommendations(gap_item['dimension'], competitor))
+                else:
+                    st.info(f"No detailed feedback available for {competitor} in this dimension")
+                
+                st.markdown("---")
         else:
-            st.success("🎉 Dayforce leads in all dimensions!")
+            st.success("🎉 Dayforce leads in all dimensions! No competitive gaps identified.")
+            st.balloons()
     
     st.markdown("---")
     

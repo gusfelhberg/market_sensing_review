@@ -102,51 +102,50 @@ def render(filtered_df, full_df):
                 </div>
                 """, unsafe_allow_html=True)
                 
-                col_pain, col_topic = st.columns(2)
+                # Show sub-dimensions and topics side by side
+                col_subdim, col_topic = st.columns(2)
                 
-                with col_pain:
-                    st.markdown("**🔍 Top Pain Points:**")
-                    if opp['top_pain_points']:
-                        for pain, count in opp['top_pain_points']:
-                            if pain and len(pain) > 5:
-                                st.markdown(f"- {pain[:200]}... ({count} mentions)")
+                with col_subdim:
+                    st.markdown("**🔍 Sub-Dimension Scores:**")
+                    sub_dims = opp.get('sub_dimension_scores', {})
+                    if sub_dims:
+                        # Sort by score to show weakest first
+                        sorted_subdims = sorted(sub_dims.items(), key=lambda x: x[1] if pd.notna(x[1]) else 0)
+                        for sub_dim, score in sorted_subdims[:5]:
+                            if pd.notna(score):
+                                nice_name = sub_dim.replace('_', ' ').title()
+                                color = '🔴' if score < 3.5 else '🟡' if score < 4.0 else '🟢'
+                                st.markdown(f"{color} {nice_name}: {score:.2f}/5")
                     else:
-                        st.info("No specific pain points identified")
+                        st.info("No sub-dimension data available")
                 
                 with col_topic:
                     st.markdown("**📌 Related Topics:**")
-                    if opp['top_topics']:
+                    if opp.get('top_topics'):
                         for topic, count in opp['top_topics']:
                             st.markdown(f"- {topic} ({count} mentions)")
                     else:
                         st.info("No specific topics identified")
                 
-                # Show insights from review_insights column (XLSX - AI Analysis)
-                st.markdown("### 💡 Key Insights")
+                # Show sub-dimension breakdown
+                st.markdown("### � Sub-Dimension Analysis")
                 st.caption(data_source_badge('ai_analysis'))
                 
-                # Get insights for this dimension from low-performing reviews
-                low_reviews = dayforce_df[dayforce_df[opp['dimension']] < 4.0]
-                if len(low_reviews) > 0 and 'insights_list' in low_reviews.columns:
-                    all_insights = []
-                    for idx, row in low_reviews.iterrows():
-                        insights = row.get('insights_list')
-                        if isinstance(insights, (list, tuple)) and len(insights) > 0:
-                            all_insights.extend(insights)
-                    
-                    if all_insights:
-                        # Show top insights (deduplicated)
-                        unique_insights = list(set(all_insights))[:5]
-                        for insight in unique_insights:
-                            if insight and len(insight.strip()) > 10:
-                                st.markdown(f"""
-                                <div style="background-color: #d1ecf1; padding: 15px; margin: 10px 0; 
-                                            border-radius: 5px; border-left: 4px solid #0c5460;">
-                                    {insight}
-                                </div>
-                                """, unsafe_allow_html=True)
-                    else:
-                        st.info("No specific insights available for this dimension")
+                # Get sub-dimensions for this opportunity
+                sub_dims = opp.get('sub_dimension_scores', {})
+                if sub_dims:
+                    st.markdown("**Performance breakdown:**")
+                    for sub_dim, score in sorted(sub_dims.items(), key=lambda x: x[1]):
+                        if pd.notna(score):
+                            # Format sub-dimension name nicely
+                            nice_name = sub_dim.replace('_', ' ').title()
+                            color = '#28a745' if score >= 4 else '#ffc107' if score >= 3.5 else '#dc3545'
+                            st.markdown(f"""
+                            <div style="background-color: #f8f9fa; padding: 10px; margin: 5px 0; 
+                                        border-radius: 5px; border-left: 4px solid {color};">
+                                <strong>{nice_name}</strong>: {score:.2f}/5.0
+                            </div>
+                            """, unsafe_allow_html=True)
                 else:
                     st.info("No specific insights available for this dimension")
     else:
@@ -202,11 +201,19 @@ def render(filtered_df, full_df):
         if high_severity:
             st.markdown("### 🔴 High Severity Pain Points")
             for i, pain in enumerate(high_severity[:5], 1):
+                # Format the pain point description from sub-dimensions
+                top_issues = list(pain['low_sub_dimensions'].items())[:2]
+                issues_str = ', '.join([f"{dim} ({score:.1f})" for dim, score in top_issues])
+                
+                headline = pain['headline'] if pain['headline'] != 'No headline' else 'Critical Issue'
+                date_str = pain['date'].strftime('%Y-%m-%d') if pd.notna(pain['date']) else 'N/A'
+                
                 st.markdown(f"""
                 <div style="background-color: #f8d7da; padding: 15px; margin: 10px 0; 
                             border-radius: 5px; border-left: 4px solid #dc3545;">
-                    <strong>#{i}</strong> {pain['pain_point'][:300]}<br/>
-                    <small>Review date: {pain['date'].strftime('%Y-%m-%d') if pd.notna(pain['date']) else 'N/A'} | 
+                    <strong>#{i}. {headline}</strong><br/>
+                    Issues: {issues_str}<br/>
+                    <small>Review date: {date_str} | 
                     Rating: {pain['overall_rating']}/5</small>
                 </div>
                 """, unsafe_allow_html=True)
@@ -347,60 +354,57 @@ def render(filtered_df, full_df):
     st.markdown("---")
     
     # Customer Insights from Reviews
-    st.subheader("💡 Customer Insights")
-    st.markdown("*What customers are saying about Dayforce*")
+    st.subheader("💡 Customer Insights Summary")
+    st.markdown("*Key themes from Dayforce customer reviews*")
     st.caption(data_source_badge('ai_analysis'))
     
-    # Get all insights from Dayforce reviews
-    if 'insights_list' in dayforce_df.columns:
-        all_insights = []
-        for idx, row in dayforce_df.iterrows():
-            insights = row.get('insights_list')
-            if isinstance(insights, (list, tuple)) and len(insights) > 0:
-                for insight in insights:
-                    if insight and len(insight.strip()) > 10:
-                        all_insights.append({
-                            'insight': insight,
-                            'rating': row['Overall User Rating'],
-                            'date': row.get('parsed_date', row.get('Review Date'))
-                        })
-        
-        if all_insights:
-            # Group by sentiment (positive vs negative)
-            positive_insights = [i for i in all_insights if i['rating'] >= 4]
-            improvement_insights = [i for i in all_insights if i['rating'] < 4]
-            
-            col_pos, col_imp = st.columns(2)
-            
-            with col_pos:
-                st.markdown("### ✅ Positive Feedback")
-                if positive_insights:
-                    for i, item in enumerate(positive_insights[:5], 1):
-                        st.markdown(f"""
-                        <div style="background-color: #d4edda; padding: 12px; margin: 8px 0; 
-                                    border-radius: 5px; border-left: 4px solid #28a745;">
-                            <small>Rating: {item['rating']}/5</small><br/>
-                            {item['insight']}
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.info("No positive insights found")
-            
-            with col_imp:
-                st.markdown("### 🔧 Areas for Improvement")
-                if improvement_insights:
-                    for i, item in enumerate(improvement_insights[:5], 1):
-                        st.markdown(f"""
-                        <div style="background-color: #fff3cd; padding: 12px; margin: 8px 0; 
-                                    border-radius: 5px; border-left: 4px solid #ffc107;">
-                            <small>Rating: {item['rating']}/5</small><br/>
-                            {item['insight']}
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.info("No improvement insights found")
+    # Analyze reviews by rating and extract headline themes
+    positive_reviews = dayforce_df[dayforce_df['Overall User Rating'] >= 4]
+    improvement_reviews = dayforce_df[dayforce_df['Overall User Rating'] < 4]
+    
+    col_pos, col_imp = st.columns(2)
+    
+    with col_pos:
+        st.markdown("### ✅ Positive Feedback")
+        if len(positive_reviews) > 0:
+            # Extract key themes from headlines and comments
+            for idx, row in positive_reviews.nlargest(5, 'Overall User Rating').iterrows():
+                headline = row.get('Headline', 'No headline')
+                rating = row.get('Overall User Rating', 0)
+                # Get top dimension
+                dims = ['product', 'gtm', 'market_direction', 'implementation', 'customer_experience']
+                dim_scores = {d: row.get(d, 0) for d in dims if pd.notna(row.get(d, None))}
+                top_dim = max(dim_scores.items(), key=lambda x: x[1])[0] if dim_scores else 'overall'
+                
+                st.markdown(f"""
+                <div style="background-color: #d4edda; padding: 12px; margin: 8px 0; 
+                            border-radius: 5px; border-left: 4px solid #28a745;">
+                    <small>Rating: {rating}/5 | Strength: {top_dim.replace('_', ' ').title()}</small><br/>
+                    <strong>{headline}</strong>
+                </div>
+                """, unsafe_allow_html=True)
         else:
-            st.info("No insights available in current selection")
-    else:
-        st.warning("Insights column not found in data")
+            st.info("No positive reviews found")
+    
+    with col_imp:
+        st.markdown("### 🔧 Areas for Improvement")
+        if len(improvement_reviews) > 0:
+            # Extract key themes from critical reviews
+            for idx, row in improvement_reviews.nsmallest(5, 'Overall User Rating').iterrows():
+                headline = row.get('Headline', 'No headline')
+                rating = row.get('Overall User Rating', 0)
+                # Get weakest dimension
+                dims = ['product', 'gtm', 'market_direction', 'implementation', 'customer_experience']
+                dim_scores = {d: row.get(d, 0) for d in dims if pd.notna(row.get(d, None))}
+                weak_dim = min(dim_scores.items(), key=lambda x: x[1])[0] if dim_scores else 'overall'
+                
+                st.markdown(f"""
+                <div style="background-color: #fff3cd; padding: 12px; margin: 8px 0; 
+                            border-radius: 5px; border-left: 4px solid #ffc107;">
+                    <small>Rating: {rating}/5 | Concern: {weak_dim.replace('_', ' ').title()}</small><br/>
+                    <strong>{headline}</strong>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.success("No critical reviews found!")
 

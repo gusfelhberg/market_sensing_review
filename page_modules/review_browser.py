@@ -30,11 +30,11 @@ def render(filtered_df, full_df):
         'customer_experience': 'Customer Experience (AI)'
     }
     
-    # Parse topics
+    # Use the already-parsed topics_list from data loading
     analysis_df = filtered_df.copy()
-    analysis_df['topics_list'] = analysis_df['topics'].apply(
-        lambda x: eval(x) if pd.notna(x) and isinstance(x, str) else []
-    )
+    # Ensure topics_list exists (it should be created during data loading)
+    if 'topics_list' not in analysis_df.columns:
+        analysis_df['topics_list'] = [[] for _ in range(len(analysis_df))]
     
     st.markdown("---")
     
@@ -242,15 +242,46 @@ def render(filtered_df, full_df):
                     ])
                     st.markdown(topics_html, unsafe_allow_html=True)
                 
-                # AI Insights (if available)
-                if pd.notna(row.get('review_insights', '')):
-                    st.markdown("---")
-                    st.markdown("**AI-Generated Insights:**")
-                    st.info(row['review_insights'])
+                # Show dimension-specific topics
+                st.markdown("---")
+                st.markdown("**Topics by Dimension:**")
                 
-                # Pain Points (if available)
-                if pd.notna(row.get('review_pain_points', '')):
-                    st.markdown("**Pain Points:**")
-                    st.warning(row['review_pain_points'])
+                topic_categories = [
+                    ('Product', 'product_topics_list', '🔧'),
+                    ('GTM', 'gtm_topics_list', '💼'),
+                    ('Market Direction', 'market_direction_topics_list', '🎯'),
+                    ('Implementation', 'implementation_topics_list', '⚙️'),
+                    ('Customer Experience', 'customer_experience_topics_list', '🤝'),
+                    ('Other', 'other_topics_list', '📌')
+                ]
+                
+                for label, col, emoji in topic_categories:
+                    if col in row and row[col]:
+                        topics = row[col]
+                        if topics:
+                            topics_str = ', '.join(topics[:5])  # Limit to first 5
+                            st.markdown(f"{emoji} **{label}:** {topics_str}")
+                
+                # Show low-scoring dimensions as pain points
+                st.markdown("---")
+                st.markdown("**Performance Indicators:**")
+                
+                score_cols = [
+                    ('degree_of_meeting_functional_requirements', 'Functional Requirements'),
+                    ('product_functionality', 'Product Functionality'),
+                    ('quality_of_product_user_experience', 'User Experience'),
+                    ('quality_and_timeliness_of_support', 'Support Quality'),
+                    ('value_for_money', 'Value for Money')
+                ]
+                
+                low_scores = []
+                for col, label in score_cols:
+                    if col in row and pd.notna(row[col]):
+                        score = row[col]
+                        if score < 3.5:
+                            low_scores.append(f"{label}: {score}/5")
+                
+                if low_scores:
+                    st.warning("**Areas of Concern:**\n" + "\n- ".join([''] + low_scores))
     else:
         st.info("No reviews match the selected filters.")
