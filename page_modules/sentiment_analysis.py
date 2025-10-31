@@ -19,14 +19,31 @@ def render(filtered_df, full_df):
     st.markdown("**Granular analysis across 5 dimensions and 15 sub-dimensions with actionable insights**")
     st.caption(data_source_badge('ai_analysis'))
     
-    # Filter to Dayforce only for strategic focus
-    dayforce_df = filtered_df[filtered_df['Product'] == 'Dayforce']
+    # Product selector (default to Dayforce when available)
+    available_products = sorted([p for p in filtered_df['Product'].dropna().unique()])
     
-    if len(dayforce_df) == 0:
-        st.warning("⚠️ No Dayforce reviews in current selection. Adjust filters to include Dayforce data.")
+    if not available_products:
+        st.warning("⚠️ No product data available in current selection. Adjust filters to include review data.")
+        return
+
+    default_product_index = available_products.index('Dayforce') if 'Dayforce' in available_products else 0
+    selected_product = st.selectbox(
+        "Select product for sentiment analysis",
+        options=available_products,
+        index=default_product_index,
+        help="All visualizations on this page will use the selected product"
+    )
+
+    product_df = filtered_df[filtered_df['Product'] == selected_product]
+
+    if len(product_df) == 0:
+        st.warning(f"⚠️ No {selected_product} reviews in current selection. Adjust filters to include this product.")
         return
     
-    st.info(f"📊 Analyzing {len(dayforce_df)} Dayforce reviews from {dayforce_df['parsed_date'].min().strftime('%b %Y')} to {dayforce_df['parsed_date'].max().strftime('%b %Y')}")
+    st.info(
+        f"📊 Analyzing {len(product_df)} {selected_product} reviews from "
+        f"{product_df['parsed_date'].min().strftime('%b %Y')} to {product_df['parsed_date'].max().strftime('%b %Y')}"
+    )
     
     # Tab structure for different analysis views
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -56,7 +73,7 @@ def render(filtered_df, full_df):
         for dim in dimensions:
             sub_dims = get_sub_dimensions_for_dimension(dim)
             for sub_dim in sub_dims:
-                scores = dayforce_df[sub_dim].dropna()
+                scores = product_df[sub_dim].dropna()
                 if len(scores) > 0:
                     avg_score = scores.mean()
                     coverage = len(scores)
@@ -69,58 +86,61 @@ def render(filtered_df, full_df):
                         'Coverage': coverage,
                         'Status': '🔴 Critical' if avg_score < 3.5 else '🟡 Attention' if avg_score < 4.0 else '🟢 Strong'
                     })
-        
+
         heatmap_df = pd.DataFrame(heatmap_data)
-        
-        # Display metrics first
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            critical_count = len(heatmap_df[heatmap_df['Score'] < 3.5])
-            st.metric("🔴 Critical Areas", critical_count, help="Sub-dimensions scoring below 3.5")
-        with col2:
-            attention_count = len(heatmap_df[(heatmap_df['Score'] >= 3.5) & (heatmap_df['Score'] < 4.0)])
-            st.metric("🟡 Needs Attention", attention_count, help="Sub-dimensions scoring 3.5-4.0")
-        with col3:
-            strong_count = len(heatmap_df[heatmap_df['Score'] >= 4.0])
-            st.metric("🟢 Strong Performance", strong_count, help="Sub-dimensions scoring 4.0+")
-        
-        st.markdown("---")
-        
-        # Create visual heatmap
-        fig = px.sunburst(
-            heatmap_df,
-            path=['Dimension', 'Sub-Dimension'],
-            values='Coverage',
-            color='Score',
-            color_continuous_scale='RdYlGn',
-            range_color=[2.5, 5],
-            title="Performance Hierarchy: Dimensions → Sub-Dimensions"
-        )
-        fig.update_layout(height=600)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        st.markdown("---")
-        
-        # Detailed table with drill-down
-        st.subheader("Detailed Sub-Dimension Breakdown")
-        
-        for dim in dimensions:
-            with st.expander(f"**{dimension_labels[dim]}** - Expand for details"):
-                dim_data = heatmap_df[heatmap_df['Dimension'] == dimension_labels[dim]]
-                dim_data_sorted = dim_data.sort_values('Score')
-                
-                # Overall dimension score
-                overall = dayforce_df[dim].dropna().mean()
-                st.metric(f"{dimension_labels[dim]} Overall Score", f"{overall:.2f}/5.0")
-                
-                # Sub-dimensions
-                for _, row in dim_data_sorted.iterrows():
-                    col_left, col_right = st.columns([3, 1])
-                    with col_left:
-                        status_icon = "🔴" if row['Score'] < 3.5 else "🟡" if row['Score'] < 4.0 else "🟢"
-                        st.markdown(f"{status_icon} **{row['Sub-Dimension']}**")
-                    with col_right:
-                        st.markdown(f"**{row['Score']:.2f}**/5.0 ({row['Coverage']} reviews)")
+
+        if heatmap_df.empty:
+            st.info("Not enough sub-dimension data to render the heatmap for this product.")
+        else:
+            # Display metrics first
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                critical_count = len(heatmap_df[heatmap_df['Score'] < 3.5])
+                st.metric("🔴 Critical Areas", critical_count, help="Sub-dimensions scoring below 3.5")
+            with col2:
+                attention_count = len(heatmap_df[(heatmap_df['Score'] >= 3.5) & (heatmap_df['Score'] < 4.0)])
+                st.metric("🟡 Needs Attention", attention_count, help="Sub-dimensions scoring 3.5-4.0")
+            with col3:
+                strong_count = len(heatmap_df[heatmap_df['Score'] >= 4.0])
+                st.metric("🟢 Strong Performance", strong_count, help="Sub-dimensions scoring 4.0+")
+
+            st.markdown("---")
+
+            # Create visual heatmap
+            fig = px.sunburst(
+                heatmap_df,
+                path=['Dimension', 'Sub-Dimension'],
+                values='Coverage',
+                color='Score',
+                color_continuous_scale='RdYlGn',
+                range_color=[2.5, 5],
+                title="Performance Hierarchy: Dimensions → Sub-Dimensions"
+            )
+            fig.update_layout(height=600)
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("---")
+
+            # Detailed table with drill-down
+            st.subheader("Detailed Sub-Dimension Breakdown")
+
+            for dim in dimensions:
+                with st.expander(f"**{dimension_labels[dim]}** - Expand for details"):
+                    dim_data = heatmap_df[heatmap_df['Dimension'] == dimension_labels[dim]]
+                    dim_data_sorted = dim_data.sort_values('Score')
+
+                    # Overall dimension score
+                    overall = product_df[dim].dropna().mean()
+                    st.metric(f"{dimension_labels[dim]} Overall Score", f"{overall:.2f}/5.0")
+
+                    # Sub-dimensions
+                    for _, row in dim_data_sorted.iterrows():
+                        col_left, col_right = st.columns([3, 1])
+                        with col_left:
+                            status_icon = "🔴" if row['Score'] < 3.5 else "🟡" if row['Score'] < 4.0 else "🟢"
+                            st.markdown(f"{status_icon} **{row['Sub-Dimension']}**")
+                        with col_right:
+                            st.markdown(f"**{row['Score']:.2f}**/5.0 ({row['Coverage']} reviews)")
     
     # ===== TAB 2: TREND ANALYSIS =====
     with tab2:
@@ -146,15 +166,15 @@ def render(filtered_df, full_df):
         
         if selected_dims:
             # Prepare time series data
-            dayforce_time = dayforce_df.copy()
-            dayforce_time['Month'] = dayforce_time['parsed_date'].dt.to_period('M').astype(str)
-            dayforce_time['Quarter'] = dayforce_time['parsed_date'].dt.to_period('Q').astype(str)
+            product_time = product_df.copy()
+            product_time['Month'] = product_time['parsed_date'].dt.to_period('M').astype(str)
+            product_time['Quarter'] = product_time['parsed_date'].dt.to_period('Q').astype(str)
             
             group_col = 'Month' if time_window == "Monthly" else 'Quarter' if time_window == "Quarterly" else None
             
             if group_col:
                 # Group by time period
-                time_scores = dayforce_time.groupby(group_col)[selected_dims].mean().reset_index()
+                time_scores = product_time.groupby(group_col)[selected_dims].mean().reset_index()
                 
                 # Create line chart with consistent colors
                 from utils import get_dimension_color
@@ -218,9 +238,9 @@ def render(filtered_df, full_df):
             format_func=lambda x: dimension_labels[x],
             key='root_cause_dim'
         )
-        
-        dim_score = dayforce_df[analysis_dim].dropna().mean()
-        
+
+        dim_score = product_df[analysis_dim].dropna().mean()
+
         col_overview, col_status = st.columns([2, 1])
         with col_overview:
             st.metric(f"{dimension_labels[analysis_dim]} Overall Score", f"{dim_score:.2f}/5.0")
@@ -231,17 +251,17 @@ def render(filtered_df, full_df):
                 st.warning("🟡 Below target - Monitor closely")
             else:
                 st.success("🟢 Meeting expectations")
-        
+
         st.markdown("---")
-        
+
         # Sub-dimension breakdown
         st.markdown("### 📊 Sub-Dimension Performance")
-        
+
         sub_dims = get_sub_dimensions_for_dimension(analysis_dim)
         sub_dim_data = []
-        
+
         for sub_dim in sub_dims:
-            scores = dayforce_df[sub_dim].dropna()
+            scores = product_df[sub_dim].dropna()
             if len(scores) > 0:
                 avg = scores.mean()
                 low_count = (scores < 3.5).sum()
@@ -252,14 +272,14 @@ def render(filtered_df, full_df):
                     'count': len(scores),
                     'low_count': low_count
                 })
-        
+
         sub_dim_data_sorted = sorted(sub_dim_data, key=lambda x: x['avg'])
-        
+
         for item in sub_dim_data_sorted:
             col_name, col_score, col_issues = st.columns([3, 1, 1])
-            
+
             status_color = "🔴" if item['avg'] < 3.5 else "🟡" if item['avg'] < 4.0 else "🟢"
-            
+
             with col_name:
                 st.markdown(f"{status_color} **{item['nice_name']}**")
             with col_score:
@@ -267,16 +287,16 @@ def render(filtered_df, full_df):
             with col_issues:
                 if item['low_count'] > 0:
                     st.markdown(f"⚠️ {item['low_count']} low reviews")
-        
+
         st.markdown("---")
-        
+
         # Topic correlation with negative sentiment
         st.markdown("### 🔍 Topics Associated with Negative Sentiment")
         st.markdown(f"*What are customers talking about when they rate {dimension_labels[analysis_dim]} poorly?*")
-        
+
         # Get low-scoring reviews for this dimension
-        low_reviews = dayforce_df[dayforce_df[analysis_dim] < 3.5]
-        high_reviews = dayforce_df[dayforce_df[analysis_dim] >= 4.0]
+        low_reviews = product_df[product_df[analysis_dim] < 3.5]
+        high_reviews = product_df[product_df[analysis_dim] >= 4.0]
         
         # Map dimension to topic column
         topic_col_map = {
@@ -364,10 +384,10 @@ def render(filtered_df, full_df):
     # ===== TAB 4: COMPETITIVE CONTEXT =====
     with tab4:
         st.subheader("⚔️ Competitive Benchmark")
-        st.markdown("*How does Dayforce compare to competitors at the sub-dimension level?*")
-        
-        competitors_df = filtered_df[filtered_df['Product'] != 'Dayforce']
-        
+        st.markdown(f"*How does {selected_product} compare to competitors at the sub-dimension level?*")
+
+        competitors_df = filtered_df[filtered_df['Product'] != selected_product]
+
         if len(competitors_df) > 0:
             # Select dimension for comparison
             comp_dim = st.selectbox(
@@ -385,8 +405,8 @@ def render(filtered_df, full_df):
             for sub_dim in sub_dims:
                 nice_name = sub_dim.replace('_', ' ').title()
                 
-                # Dayforce score
-                df_score = dayforce_df[sub_dim].dropna().mean()
+                # Selected product score
+                df_score = product_df[sub_dim].dropna().mean()
                 
                 # Competitor average
                 comp_score = competitors_df[sub_dim].dropna().mean()
@@ -394,52 +414,55 @@ def render(filtered_df, full_df):
                 if pd.notna(df_score):
                     comparison_data.append({
                         'Sub-Dimension': nice_name,
-                        'Dayforce': df_score,
+                        selected_product: df_score,
                         'Competitors Avg': comp_score if pd.notna(comp_score) else 0,
                         'Gap': df_score - (comp_score if pd.notna(comp_score) else 0)
                     })
             
             comp_df = pd.DataFrame(comparison_data)
-            
-            # Visualization
-            fig = go.Figure()
-            
-            fig.add_trace(go.Bar(
-                name='Dayforce',
-                y=comp_df['Sub-Dimension'],
-                x=comp_df['Dayforce'],
-                orientation='h',
-                marker_color='#0c5460'
-            ))
-            
-            fig.add_trace(go.Bar(
-                name='Competitors Average',
-                y=comp_df['Sub-Dimension'],
-                x=comp_df['Competitors Avg'],
-                orientation='h',
-                marker_color='lightgray'
-            ))
-            
-            fig.update_layout(
-                title=f"Dayforce vs Competitors: {dimension_labels[comp_dim]} Sub-Dimensions",
-                xaxis_title="Average Score",
-                barmode='group',
-                height=400,
-                xaxis=dict(range=[0, 5])
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Gap analysis
-            st.markdown("### Gap Analysis")
-            
-            for _, row in comp_df.iterrows():
-                if row['Gap'] > 0.3:
-                    st.success(f"🏆 **{row['Sub-Dimension']}**: Leading by +{row['Gap']:.2f} points")
-                elif row['Gap'] < -0.3:
-                    st.error(f"🎯 **{row['Sub-Dimension']}**: Trailing by {row['Gap']:.2f} points - Priority area")
-                else:
-                    st.info(f"➡️ **{row['Sub-Dimension']}**: Competitive ({row['Gap']:+.2f})")
+
+            if comp_df.empty:
+                st.info("Not enough overlapping review data to compare sub-dimensions against competitors.")
+            else:
+                # Visualization
+                fig = go.Figure()
+
+                fig.add_trace(go.Bar(
+                    name=selected_product,
+                    y=comp_df['Sub-Dimension'],
+                    x=comp_df[selected_product],
+                    orientation='h',
+                    marker_color='#0c5460'
+                ))
+
+                fig.add_trace(go.Bar(
+                    name='Competitors Average',
+                    y=comp_df['Sub-Dimension'],
+                    x=comp_df['Competitors Avg'],
+                    orientation='h',
+                    marker_color='lightgray'
+                ))
+
+                fig.update_layout(
+                    title=f"{selected_product} vs Competitors: {dimension_labels[comp_dim]} Sub-Dimensions",
+                    xaxis_title="Average Score",
+                    barmode='group',
+                    height=400,
+                    xaxis=dict(range=[0, 5])
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Gap analysis
+                st.markdown("### Gap Analysis")
+
+                for _, row in comp_df.iterrows():
+                    if row['Gap'] > 0.3:
+                        st.success(f"🏆 **{row['Sub-Dimension']}**: Leading by +{row['Gap']:.2f} points")
+                    elif row['Gap'] < -0.3:
+                        st.error(f"🎯 **{row['Sub-Dimension']}**: Trailing by {row['Gap']:.2f} points - Priority area")
+                    else:
+                        st.info(f"➡️ **{row['Sub-Dimension']}**: Competitive ({row['Gap']:+.2f})")
         else:
             st.warning("No competitor data in current selection")
 
