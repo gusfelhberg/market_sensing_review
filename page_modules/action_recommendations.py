@@ -9,6 +9,28 @@ import plotly.express as px
 import plotly.graph_objects as go
 from utils import identify_improvement_opportunities, extract_pain_points, get_sentiment_color, data_source_badge
 
+
+def _clean_text(value, default=""):
+    """Return a clean string, avoiding NaN placeholders."""
+    if isinstance(value, str):
+        text = value.strip()
+        return text if text else default
+    if pd.notna(value):
+        text = str(value).strip()
+        if text and text.lower() != "nan":
+            return text
+    return default
+
+
+def _safe_extract_text(row, keys, default):
+    """Try multiple column keys to provide meaningful fallback copy."""
+    for key in keys:
+        if key in row:
+            cleaned = _clean_text(row.get(key), default)
+            if cleaned and cleaned != default:
+                return cleaned
+    return default
+
 def render(filtered_df, full_df):
     """Render the Action Insights page"""
     
@@ -205,7 +227,10 @@ def render(filtered_df, full_df):
                 top_issues = list(pain['low_sub_dimensions'].items())[:2]
                 issues_str = ', '.join([f"{dim} ({score:.1f})" for dim, score in top_issues])
                 
-                headline = pain['headline'] if pain['headline'] != 'No headline' else 'Critical Issue'
+                raw_headline = pain.get('headline') if isinstance(pain, dict) else None
+                headline = _clean_text(raw_headline, 'Critical Issue')
+                if headline.lower() == 'no headline':
+                    headline = 'Critical Issue'
                 date_str = pain['date'].strftime('%Y-%m-%d') if pd.notna(pain['date']) else 'N/A'
                 
                 st.markdown(f"""
@@ -351,60 +376,3 @@ def render(filtered_df, full_df):
     else:
         st.info("Not enough Dayforce reviews to perform trend analysis")
     
-    st.markdown("---")
-    
-    # Customer Insights from Reviews
-    st.subheader("💡 Customer Insights Summary")
-    st.markdown("*Key themes from Dayforce customer reviews*")
-    st.caption(data_source_badge('ai_analysis'))
-    
-    # Analyze reviews by rating and extract headline themes
-    positive_reviews = dayforce_df[dayforce_df['Overall User Rating'] >= 4]
-    improvement_reviews = dayforce_df[dayforce_df['Overall User Rating'] < 4]
-    
-    col_pos, col_imp = st.columns(2)
-    
-    with col_pos:
-        st.markdown("### ✅ Positive Feedback")
-        if len(positive_reviews) > 0:
-            # Extract key themes from headlines and comments
-            for idx, row in positive_reviews.nlargest(5, 'Overall User Rating').iterrows():
-                headline = row.get('Headline', 'No headline')
-                rating = row.get('Overall User Rating', 0)
-                # Get top dimension
-                dims = ['product', 'gtm', 'market_direction', 'implementation', 'customer_experience']
-                dim_scores = {d: row.get(d, 0) for d in dims if pd.notna(row.get(d, None))}
-                top_dim = max(dim_scores.items(), key=lambda x: x[1])[0] if dim_scores else 'overall'
-                
-                st.markdown(f"""
-                <div style="background-color: #d4edda; padding: 12px; margin: 8px 0; 
-                            border-radius: 5px; border-left: 4px solid #28a745;">
-                    <small>Rating: {rating}/5 | Strength: {top_dim.replace('_', ' ').title()}</small><br/>
-                    <strong>{headline}</strong>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No positive reviews found")
-    
-    with col_imp:
-        st.markdown("### 🔧 Areas for Improvement")
-        if len(improvement_reviews) > 0:
-            # Extract key themes from critical reviews
-            for idx, row in improvement_reviews.nsmallest(5, 'Overall User Rating').iterrows():
-                headline = row.get('Headline', 'No headline')
-                rating = row.get('Overall User Rating', 0)
-                # Get weakest dimension
-                dims = ['product', 'gtm', 'market_direction', 'implementation', 'customer_experience']
-                dim_scores = {d: row.get(d, 0) for d in dims if pd.notna(row.get(d, None))}
-                weak_dim = min(dim_scores.items(), key=lambda x: x[1])[0] if dim_scores else 'overall'
-                
-                st.markdown(f"""
-                <div style="background-color: #fff3cd; padding: 12px; margin: 8px 0; 
-                            border-radius: 5px; border-left: 4px solid #ffc107;">
-                    <small>Rating: {rating}/5 | Concern: {weak_dim.replace('_', ' ').title()}</small><br/>
-                    <strong>{headline}</strong>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.success("No critical reviews found!")
-
