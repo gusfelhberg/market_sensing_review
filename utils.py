@@ -8,15 +8,61 @@ import re
 from datetime import datetime
 import streamlit as st
 
+def get_source_type_config():
+    """
+    Return configuration for different source types
+    Used for consistent labeling, icons, and colors across the app
+    """
+    return {
+        'gartner_review': {
+            'label': 'Customer Review',
+            'short_label': 'Reviews',
+            'icon': '👤',
+            'color': '#2D6FDD',
+            'description': 'Direct user feedback from Gartner Peer Insights',
+            'badge': '👤 Customer Review'
+        },
+        'analyst_insight': {
+            'label': 'Analyst Intelligence',
+            'short_label': 'Analyst',
+            'icon': '🎓',
+            'color': '#059669',
+            'description': 'Industry analyst observations and insights',
+            'badge': '🎓 Analyst Intelligence'
+        }
+    }
+
+def get_source_badge(source_type):
+    """Get display badge for a source type"""
+    config = get_source_type_config()
+    return config.get(source_type, {}).get('badge', source_type)
+
+def get_source_icon(source_type):
+    """Get icon for a source type"""
+    config = get_source_type_config()
+    return config.get(source_type, {}).get('icon', '📊')
+
+def get_source_label(source_type):
+    """Get human-readable label for a source type"""
+    config = get_source_type_config()
+    return config.get(source_type, {}).get('label', source_type)
+
+def get_source_color(source_type):
+    """Get color for a source type"""
+    config = get_source_type_config()
+    return config.get(source_type, {}).get('color', '#6c757d')
+
 def data_source_badge(source_type):
     """
     Display a small badge indicating data source
-    source_type: 'customer_review' or 'ai_analysis'
+    source_type: 'customer_review', 'ai_analysis', or actual source type
     """
     if source_type == 'customer_review':
         return "📄 *XLSX - Customer Review*"
     elif source_type == 'ai_analysis':
         return "🤖 *XLSX - AI Analysis*"
+    elif source_type in get_source_type_config():
+        return get_source_badge(source_type)
     else:
         return ""
 
@@ -100,16 +146,28 @@ def get_product_color(product):
     return colors.get(product, '#6c757d')  # Default gray if not found
 
 def load_data(filepath=None):
-    """Load and preprocess the Excel data - combines Sept and Oct 2025 files"""
-    # Load both new data files and combine them
-    sept_df = pd.read_excel('market_sensing_data_gartner_ai_output_sept2025.xlsx')
-    oct_df = pd.read_excel('market_sensing_data_gartner_ai_output_oct2025.xlsx')
+    """
+    LEGACY FUNCTION - Maintained for backward compatibility
+    Load and preprocess the Excel data - combines Sept and Oct 2025 files
+    
+    For new multi-source implementation, use load_unified_data() instead
+    """
+    # Load both old data files and combine them (legacy)
+    sept_df = pd.read_excel('data/market_sensing_data_gartner_ai_output_sept2025.xlsx')
+    oct_df = pd.read_excel('data/market_sensing_data_gartner_ai_output_oct2025.xlsx')
     
     # Combine the dataframes
     df = pd.concat([sept_df, oct_df], ignore_index=True)
     
+    # Add source type for legacy data
+    df['source_type'] = 'gartner_review'
+    df['source_name'] = 'Gartner Peer Insights'
+    
     # Parse dates
     df['parsed_date'] = pd.to_datetime(df['Review Date'], format='%d/%m/%Y', errors='coerce')
+    
+    # Standardize text content field
+    df['text_content'] = df['Overall Comment']
     
     # Parse ai_output JSON
     df['ai_parsed'] = df['ai_output'].apply(parse_ai_output)
@@ -129,6 +187,126 @@ def load_data(filepath=None):
     df = calculate_dimension_scores(df)
     
     return df
+
+def load_unified_data():
+    """
+    Load and unify data from multiple sources:
+    1. Gartner Customer Reviews
+    2. Analyst Intelligence Insights
+    
+    Returns a unified DataFrame with source_type field for filtering
+    """
+    
+    # Load Gartner reviews
+    gartner_df = pd.read_excel('data/market_sensing_data_ai_output_gartner.xlsx')
+    
+    # Load Analyst insights
+    analyst_df = pd.read_excel('data/market_sensing_data_ai_output_analyst.xlsx')
+    
+    # Add source identification
+    gartner_df['source_type'] = 'gartner_review'
+    gartner_df['source_name'] = 'Gartner Peer Insights'
+    
+    analyst_df['source_type'] = 'analyst_insight'
+    analyst_df['source_name'] = analyst_df['Firm']
+    
+    # Harmonize date fields
+    gartner_df['date'] = pd.to_datetime(gartner_df['Review Date'], format='%d/%m/%Y', errors='coerce')
+    analyst_df['date'] = pd.to_datetime(analyst_df['Date'], errors='coerce')
+    
+    gartner_df['parsed_date'] = gartner_df['date']
+    analyst_df['parsed_date'] = analyst_df['date']
+    
+    # Harmonize product field (analyst insights are Dayforce-only)
+    analyst_df['Product'] = 'Dayforce'
+    
+    # Harmonize text content field
+    gartner_df['text_content'] = gartner_df['Overall Comment'].fillna('')
+    analyst_df['text_content'] = analyst_df['Insight'].fillna('')
+    
+    # Preserve source-specific metadata
+    gartner_df['review_url'] = gartner_df.get('Review URL', '')
+    gartner_df['headline'] = gartner_df.get('Headline', '')
+    gartner_df['reviewer_role'] = gartner_df.get('Reviewer Role ', '')
+    gartner_df['reviewer_industry'] = gartner_df.get('Reviewer Industry', '')
+    gartner_df['reviewer_firm_size'] = gartner_df.get('Reviewer Firm Size', '')
+    gartner_df['lessons_learned'] = gartner_df.get('Lessons Learned', '')
+    gartner_df['overall_rating'] = pd.to_numeric(gartner_df.get('Overall User Rating', None), errors='coerce')
+    gartner_df['analyst_firm'] = None  # Not applicable for reviews
+    gartner_df['analyst_name'] = None  # Not applicable for reviews
+    gartner_df['interaction'] = ''  # Not applicable for reviews
+    
+    analyst_df['analyst_firm'] = analyst_df['Firm']
+    analyst_df['analyst_name'] = analyst_df['Analyst']
+    analyst_df['interaction'] = analyst_df.get('Interaction', '')
+    analyst_df['review_url'] = ''  # No URL for analyst insights
+    analyst_df['headline'] = analyst_df['text_content'].str[:100] + '...'  # Create pseudo-headline
+    analyst_df['overall_rating'] = None  # No rating for analyst insights
+    analyst_df['reviewer_role'] = None  # Not applicable for analyst insights
+    analyst_df['reviewer_industry'] = None  # Not applicable for analyst insights
+    analyst_df['reviewer_firm_size'] = None  # Not applicable for analyst insights
+    analyst_df['lessons_learned'] = ''  # Not applicable for analyst insights
+    
+    # Parse ai_output for both sources
+    gartner_df['ai_parsed'] = gartner_df['ai_output'].apply(parse_ai_output)
+    analyst_df['ai_parsed'] = analyst_df['ai_output'].apply(parse_ai_output)
+    
+    # Parse topic columns
+    topic_columns = ['product_topics', 'gtm_topics', 'market_direction_topics', 
+                     'implementation_topics', 'customer_experience_topics', 'other_topics']
+    
+    for df in [gartner_df, analyst_df]:
+        # Create unified topics_list
+        df['topics_list'] = df.apply(lambda row: parse_all_topics(row, topic_columns), axis=1)
+        
+        # Parse individual topic columns
+        for col in topic_columns:
+            df[f'{col}_list'] = df[col].apply(parse_topics)
+    
+    # Calculate dimension scores from sub-dimensions
+    gartner_df = calculate_dimension_scores(gartner_df)
+    analyst_df = calculate_dimension_scores(analyst_df)
+    
+    # Combine dataframes
+    # Identify common columns
+    common_cols = list(set(gartner_df.columns) & set(analyst_df.columns))
+    
+    # Ensure all essential columns are present
+    essential_cols = ['source_type', 'source_name', 'Product', 'parsed_date', 'date', 'text_content',
+                      'product', 'gtm', 'market_direction', 'implementation', 'customer_experience',
+                      'topics_list', 'product_topics_list', 'gtm_topics_list', 
+                      'market_direction_topics_list', 'implementation_topics_list',
+                      'customer_experience_topics_list', 'other_topics_list',
+                      'headline', 'overall_rating', 'analyst_firm', 'analyst_name', 
+                      'reviewer_role', 'reviewer_industry', 'reviewer_firm_size', 'lessons_learned',
+                      'interaction', 'review_url']
+    
+    # Add sub-dimension columns to essential
+    sub_dimension_cols = [
+        'degree_of_meeting_functional_requirements', 'product_functionality',
+        'quality_of_product_user_experience', 'quality_of_the_evaluation_and_contracting_process',
+        'pricing_and_packaging_clarity', 'value_for_money',
+        'fit_of_product_strategy_to_market_needs', 'clarity_of_product_roadmap',
+        'extent_of_planned_product_innovation', 'ease_and_quality_of_integration_and_deployment',
+        'quality_of_user_training_and_post_go_live_support', 'implementation_cost',
+        'quality_and_timeliness_of_support', 'customer_success_management_and_value_realization',
+        'customer_community'
+    ]
+    essential_cols.extend(sub_dimension_cols)
+    
+    # Use only common columns that are essential
+    use_cols = [col for col in essential_cols if col in common_cols]
+    
+    # Combine using only common columns
+    unified_df = pd.concat([
+        gartner_df[use_cols],
+        analyst_df[use_cols]
+    ], ignore_index=True)
+    
+    # Ensure overall_rating is numeric after combining
+    unified_df['overall_rating'] = pd.to_numeric(unified_df['overall_rating'], errors='coerce')
+    
+    return unified_df
 
 def parse_ai_output(ai_output_text):
     """Parse the ai_output field to extract structured data"""
