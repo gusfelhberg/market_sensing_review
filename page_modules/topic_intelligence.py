@@ -1,6 +1,6 @@
 """
 Topic Intelligence Page
-Analyze trending topics and their associated sentiment
+Analyze trending topics and their associated sentiment with multi-source awareness
 """
 
 import streamlit as st
@@ -14,6 +14,8 @@ from utils import (
     get_sentiment_color,
     data_source_badge,
     parse_lessons_learned,
+    get_source_label,
+    get_source_icon,
 )
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
@@ -263,24 +265,59 @@ def calculate_topic_sentiment(df, topic):
     return topic_reviews[dimensions].mean().mean()
 
 def render(filtered_df, full_df):
-    """Render the Topic Intelligence page"""
+    """Render the Topic Intelligence page with multi-source awareness"""
     
-    # Ensure parsed_date column exists
+    # Ensure parsed_date column exists (should already be present from unified data loading)
     if 'parsed_date' not in filtered_df.columns:
-        filtered_df['parsed_date'] = pd.to_datetime(filtered_df['Review Date'], format='%d/%m/%Y', errors='coerce')
+        # Fallback: try to parse from date column if needed
+        if 'date' in filtered_df.columns:
+            filtered_df['parsed_date'] = pd.to_datetime(filtered_df['date'], errors='coerce')
+        else:
+            filtered_df['parsed_date'] = pd.NaT
     
     st.header("💡 Topic Intelligence")
-    st.markdown("**Understand what customers are talking about and how they feel**")
-    st.caption(data_source_badge('ai_analysis'))
+    st.markdown("**Understand what customers and analysts are discussing and their perspectives**")
     
-    st.info("💡 **Tip:** This page defaults to Dayforce analysis. Select a different product or enable comparison mode below to analyze competitors.")
+    # Show source breakdown
+    sources_present = filtered_df['source_type'].value_counts()
+    has_multiple_sources = len(sources_present) > 1
     
-    # Product selection for focused analysis
+    if has_multiple_sources:
+        source_info = []
+        for source_type, count in sources_present.items():
+            icon = get_source_icon(source_type)
+            label = get_source_label(source_type)
+            source_info.append(f"{icon} {count} {label}")
+        st.info(f"📊 **Multi-Source Topic Analysis**: {' + '.join(source_info)}")
+    else:
+        source_type = sources_present.index[0]
+        icon = get_source_icon(source_type)
+        label = get_source_label(source_type)
+        st.info(f"{icon} **{label}**: Analyzing {len(filtered_df)} insights")
+    
     st.markdown("---")
     
-    col_select1, col_select2, col_select3 = st.columns(3)
+    # Add source filter option
+    col_source, col_product1, col_compare_toggle, col_product2 = st.columns([1, 2, 1, 2])
     
-    with col_select1:
+    with col_source:
+        if has_multiple_sources:
+            source_filter = st.selectbox(
+                "📊 Source Filter",
+                ['All Sources'] + [get_source_label(st) for st in sources_present.index],
+                help="Filter topics by source"
+            )
+            
+            # Apply source filter
+            if source_filter != 'All Sources':
+                source_type_map = {get_source_label(st): st for st in sources_present.index}
+                selected_source_type = source_type_map[source_filter]
+                filtered_df = filtered_df[filtered_df['source_type'] == selected_source_type]
+        else:
+            st.markdown("**Source:**")
+            st.caption(get_source_label(sources_present.index[0]))
+    
+    with col_product1:
         focus_product = st.selectbox(
             "🎯 Primary Focus",
             ['All Products', 'Dayforce'] + [p for p in sorted(filtered_df['Product'].unique()) if p != 'Dayforce'],
@@ -288,14 +325,15 @@ def render(filtered_df, full_df):
             help="Select product to analyze in detail"
         )
     
-    with col_select2:
+    with col_compare_toggle:
+        st.markdown("&nbsp;")  # Spacing
         compare_enabled = st.checkbox(
-            "📊 Enable Comparison",
+            "📊 Compare",
             value=False,
             help="Compare topics with a competitor"
         )
     
-    with col_select3:
+    with col_product2:
         if compare_enabled:
             competitor_options = [p for p in sorted(filtered_df['Product'].unique()) if p != focus_product]
             compare_product = st.selectbox(
@@ -305,6 +343,7 @@ def render(filtered_df, full_df):
             )
         else:
             compare_product = None
+            st.markdown("&nbsp;")  # Spacing
     
     # Filter data based on selection
     if focus_product == 'All Products':
@@ -619,31 +658,32 @@ def render(filtered_df, full_df):
                 st.markdown(f"**All Reviews Mentioning This Topic** ({len(topic_reviews)} reviews)")
 
                 # Sort reviews by rating ascending (surface problem areas first)
-                topic_reviews_sorted = topic_reviews.sort_values(by='Overall User Rating', ascending=True)
+                # Filter to only reviews with ratings (exclude analyst insights)
+                reviews_with_ratings = topic_reviews[topic_reviews['overall_rating'].notna()]
+                topic_reviews_sorted = reviews_with_ratings.sort_values(by='overall_rating', ascending=True)
 
                 for idx, row in topic_reviews_sorted.iterrows():
-                    overall_rating = row.get('Overall User Rating', pd.NA)
+                    overall_rating = row.get('overall_rating', pd.NA)
                     rating_value = overall_rating if pd.notna(overall_rating) else 'N/A'
                     date_value = row.get('parsed_date') if 'parsed_date' in row else pd.NaT
                     if pd.isna(date_value):
-                        # Fall back to raw review date if parsed not available
-                        raw_date = row.get('Review Date')
-                        date_str = str(raw_date) if pd.notna(raw_date) else 'Date N/A'
+                        # Parsed date should already be available from unified data
+                        date_str = 'Date N/A'
                     else:
                         date_str = date_value.strftime('%b %d, %Y')
 
-                    headline = row.get('Headline')
+                    headline = row.get('headline')
                     if not pd.notna(headline) or not str(headline).strip():
-                        comment_text = str(row.get('Overall Comment', '')).strip()
+                        comment_text = str(row.get('text_content', '')).strip()
                         if comment_text:
                             first_sentence = comment_text.split('.')[0][:70].strip()
                             headline = first_sentence + ('...' if len(comment_text) > len(first_sentence) else '')
                         else:
                             headline = f"{row.get('Product', 'Product')} Review"
 
-                    reviewer_role = row.get('Reviewer Role ', 'Role N/A')
-                    reviewer_industry = row.get('Reviewer Industry', 'Industry N/A')
-                    reviewer_size = row.get('Reviewer Firm Size', 'Company size N/A')
+                    reviewer_role = row.get('reviewer_role', 'Role N/A')
+                    reviewer_industry = row.get('reviewer_industry', 'Industry N/A')
+                    reviewer_size = row.get('reviewer_firm_size', 'Company size N/A')
                     reviewer_country = row.get('Country', 'Country N/A')
 
                     # Determine styling icon based on rating
@@ -674,18 +714,18 @@ def render(filtered_df, full_df):
                             st.markdown(f"- Review Date: {date_str}")
                             if pd.notna(overall_rating):
                                 st.markdown(f"- Overall Rating: ⭐ {overall_rating}/5")
-                            review_url = row.get('Review URL')
+                            review_url = row.get('review_url')
                             if review_url and pd.notna(review_url):
                                 st.markdown(f"- [View Original Review]({review_url})")
 
                         # Review narrative
-                        comment_text = row.get('Overall Comment')
+                        comment_text = row.get('text_content')
                         if pd.notna(comment_text) and str(comment_text).strip():
                             st.markdown("**💬 Full Review Comment**")
                             st.markdown(f"*{comment_text}*")
 
                         # Lessons learned parsed into likes/dislikes
-                        lessons_raw = row.get('Lessons Learned')
+                        lessons_raw = row.get('lessons_learned')
                         if pd.notna(lessons_raw) and str(lessons_raw).strip():
                             lessons = parse_lessons_learned(lessons_raw)
                             if lessons['likes'] or lessons['dislikes']:

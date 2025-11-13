@@ -1,13 +1,13 @@
 """
 Action Insights Page
-Display customer insights and improvement opportunities from review analysis
+Display customer insights and improvement opportunities from multi-source analysis
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from utils import identify_improvement_opportunities, extract_pain_points, get_sentiment_color, data_source_badge
+from utils import identify_improvement_opportunities, extract_pain_points, get_sentiment_color, data_source_badge, get_source_label, get_source_icon
 
 
 def _clean_text(value, default=""):
@@ -32,53 +32,39 @@ def _safe_extract_text(row, keys, default):
     return default
 
 def render(filtered_df, full_df):
-    """Render the Action Insights page"""
+    """Render the Action Insights page with multi-source intelligence"""
     
     st.header("🎬 Action Insights")
-    st.markdown("**Customer insights and improvement opportunities for Dayforce**")
-    st.caption(data_source_badge('ai_analysis'))
-    
-    # Display data scope indicator
-    st.info("🎯 **Focus: Dayforce** - All insights are extracted from customer review AI analysis in the XLSX file")
+    st.markdown("**Strategic improvement opportunities synthesized from multiple intelligence sources**")
     
     # Focus on Dayforce
     dayforce_df = filtered_df[filtered_df['Product'] == 'Dayforce']
     
     if len(dayforce_df) == 0:
-        st.warning("⚠️ No Dayforce reviews in the current selection. Please adjust filters to include Dayforce data.")
-        
-        # Show general insights for all products
-        st.subheader("📊 General Market Insights")
-        
-        dimensions = ['product', 'gtm', 'market_direction', 'implementation', 'customer_experience']
-        dimension_labels = {
-            'product': 'Product Capabilities (AI Sentiment)',
-            'gtm': 'Go-to-Market (AI Sentiment)',
-            'market_direction': 'Market Direction (AI Sentiment)',
-            'implementation': 'Implementation (AI Sentiment)',
-            'customer_experience': 'Customer Experience (AI Sentiment)'
-        }
-        
-        # Market averages
-        st.markdown("**Market Performance by Dimension:**")
-        
-        for dim in dimensions:
-            avg_score = filtered_df[dim].mean()
-            col = get_sentiment_color(avg_score)
-            
-            st.markdown(f"""
-            <div style="background-color: #f8f9fa; padding: 10px; margin: 5px 0; 
-                        border-radius: 5px; border-left: 4px solid {col};">
-                <strong>{dimension_labels[dim]}</strong>: {avg_score:.2f}/5.0
-            </div>
-            """, unsafe_allow_html=True)
-        
+        st.warning("⚠️ No Dayforce insights in the current selection. Please adjust filters to include Dayforce data.")
         return
+    
+    # Show source breakdown for Dayforce insights
+    sources_in_dayforce = dayforce_df['source_type'].value_counts()
+    has_multiple_sources = len(sources_in_dayforce) > 1
+    
+    if has_multiple_sources:
+        source_breakdown = []
+        for source_type, count in sources_in_dayforce.items():
+            icon = get_source_icon(source_type)
+            label = get_source_label(source_type)
+            source_breakdown.append(f"{icon} {count} {label}")
+        
+        st.info(f"🎯 **Multi-Source Synthesis**: {len(dayforce_df)} Dayforce insights | {' + '.join(source_breakdown)}")
+    else:
+        source_type = sources_in_dayforce.index[0]
+        icon = get_source_icon(source_type)
+        label = get_source_label(source_type)
+        st.info(f"{icon} **{label}**: Analyzing {len(dayforce_df)} Dayforce insights")
     
     # Priority Matrix
     st.subheader("🎯 Strategic Priority Matrix for Dayforce")
     st.markdown("*Identify where to focus Dayforce resources for maximum impact*")
-    st.caption(data_source_badge('ai_analysis'))
     
     # Identify opportunities
     opportunities = identify_improvement_opportunities(filtered_df, 'Dayforce', threshold=4.0)

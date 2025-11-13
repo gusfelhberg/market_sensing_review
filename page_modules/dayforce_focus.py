@@ -1,6 +1,6 @@
 """
 Dayforce Focus Page
-Dayforce-centric analysis with competitive context
+Dayforce-centric analysis with competitive context and multi-source awareness
 """
 
 import streamlit as st
@@ -8,35 +8,52 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from utils import get_sentiment_color, get_sentiment_label, extract_pain_points, data_source_badge, parse_lessons_learned
+from utils import get_sentiment_color, get_sentiment_label, extract_pain_points, data_source_badge, parse_lessons_learned, get_source_label, get_source_icon, get_source_type_config
 from collections import Counter
 
 def render(filtered_df, full_df):
     """Render the Dayforce Focus page"""
     
     st.header("🎯 Dayforce Strategic Intelligence")
-    st.markdown("**Dayforce performance with competitive context for strategic decision-making**")
+    st.markdown("**Dayforce performance with competitive context and multi-source insights**")
     
     # Get Dayforce data
     dayforce_df = filtered_df[filtered_df['Product'] == 'Dayforce']
     competitors_df = filtered_df[filtered_df['Product'] != 'Dayforce']
     
     if len(dayforce_df) == 0:
-        st.warning("⚠️ No Dayforce reviews in current selection. Adjust filters to include Dayforce data.")
+        st.warning("⚠️ No Dayforce insights in current selection. Adjust filters to include Dayforce data.")
         return
+    
+    # Show source breakdown
+    sources_in_dayforce = dayforce_df['source_type'].value_counts()
+    has_multiple_sources = len(sources_in_dayforce) > 1
+    
+    if has_multiple_sources:
+        source_breakdown = []
+        for source_type, count in sources_in_dayforce.items():
+            icon = get_source_icon(source_type)
+            label = get_source_label(source_type)
+            source_breakdown.append(f"{icon} {count} {label}")
+        
+        st.info(f"📊 **Multi-Source Analysis**: {len(dayforce_df)} Dayforce insights | {' + '.join(source_breakdown)}")
+    else:
+        source_type = sources_in_dayforce.index[0]
+        icon = get_source_icon(source_type)
+        label = get_source_label(source_type)
+        st.info(f"{icon} **{label}**: {len(dayforce_df)} Dayforce insights")
     
     # Key Performance Indicators
     st.subheader("📊 Dayforce Performance Dashboard")
-    st.caption(data_source_badge('ai_analysis'))
-    st.info("**AI Sentiment Scores:** The dimension scores below are AI-generated sentiment analysis (1-5) from review text, complementing the Overall User Rating.")
+    st.caption("Combined AI sentiment scores across all sources")
     
     dimensions = ['product', 'gtm', 'market_direction', 'implementation', 'customer_experience']
     dimension_labels = {
-        'product': 'Product (AI)',
-        'gtm': 'GTM (AI)',
-        'market_direction': 'Market Direction (AI)',
-        'implementation': 'Implementation (AI)',
-        'customer_experience': 'Customer Exp. (AI)'
+        'product': 'Product',
+        'gtm': 'GTM',
+        'market_direction': 'Market Direction',
+        'implementation': 'Implementation',
+        'customer_experience': 'Customer Exp.'
     }
     
     # Create 5 columns for dimension comparison
@@ -438,7 +455,9 @@ def render(filtered_df, full_df):
         st.markdown("*Detailed analysis of positive feedback with specific sub-dimension strengths*")
         
         # Extract positive reviews (4+ rating) and high-scoring sub-dimensions (4.0+)
-        positive_reviews = dayforce_df[dayforce_df['Overall User Rating'] >= 4]
+        # Filter for reviews that have ratings (exclude analyst insights)
+        reviews_with_ratings = dayforce_df[dayforce_df['overall_rating'].notna()]
+        positive_reviews = reviews_with_ratings[reviews_with_ratings['overall_rating'] >= 4]
         
         if len(positive_reviews) > 0:
             # Define sub-dimensions with readable names
@@ -466,7 +485,7 @@ def render(filtered_df, full_df):
                 st.metric("⭐ Highly Satisfied", len(positive_reviews), 
                          help="Reviews with 4+ overall rating")
             with col2:
-                avg_rating = positive_reviews['Overall User Rating'].mean()
+                avg_rating = positive_reviews['overall_rating'].mean()
                 st.metric("Average Rating", f"{avg_rating:.2f}/5.0")
             with col3:
                 # Find most praised sub-dimension
@@ -509,26 +528,26 @@ def render(filtered_df, full_df):
             st.markdown("#### 🌟 Featured Positive Reviews")
             
             # Show top 5 positive reviews with full details
-            for i, (idx, row) in enumerate(positive_reviews.nlargest(5, 'Overall User Rating').iterrows(), 1):
-                headline = row['Headline'] if pd.notna(row['Headline']) and str(row['Headline']).strip() else "Highly Satisfied Customer"
+            for i, (idx, row) in enumerate(positive_reviews.nlargest(5, 'overall_rating').iterrows(), 1):
+                headline = row['headline'] if pd.notna(row['headline']) and str(row['headline']).strip() else "Highly Satisfied Customer"
                 date_str = row['parsed_date'].strftime('%b %d, %Y') if pd.notna(row['parsed_date']) else 'Date N/A'
                 
-                with st.expander(f"⭐ #{i}. {headline} (Rating: {row['Overall User Rating']}/5 | {date_str})"):
+                with st.expander(f"⭐ #{i}. {headline} (Rating: {row['overall_rating']}/5 | {date_str})"):
                     # Review metadata
                     col_meta1, col_meta2 = st.columns(2)
                     with col_meta1:
                         st.markdown(f"""
                         **Reviewer Profile:**
-                        - Role: {row['Reviewer Role '] if pd.notna(row['Reviewer Role ']) else 'N/A'}
-                        - Industry: {row['Reviewer Industry'] if pd.notna(row['Reviewer Industry']) else 'N/A'}
-                        - Company Size: {row['Reviewer Firm Size'] if pd.notna(row['Reviewer Firm Size']) else 'N/A'}
+                        - Role: {row['reviewer_role'] if pd.notna(row['reviewer_role']) else 'N/A'}
+                        - Industry: {row['reviewer_industry'] if pd.notna(row['reviewer_industry']) else 'N/A'}
+                        - Company Size: {row['reviewer_firm_size'] if pd.notna(row['reviewer_firm_size']) else 'N/A'}
                         """)
                     with col_meta2:
                         st.markdown(f"""
                         **Review Details:**
-                        - Overall Rating: ⭐ {row['Overall User Rating']}/5
+                        - Overall Rating: ⭐ {row['overall_rating']}/5
                         - Date: {date_str}
-                        - [View Original Review]({row['Review URL']})
+                        - [View Original Review]({row['review_url']})
                         """)
                     
                     # High-scoring sub-dimensions
@@ -561,13 +580,13 @@ def render(filtered_df, full_df):
                         st.markdown(f"> {ai_parsed['review_insights']}")
                     
                     # Full review text
-                    if pd.notna(row['Overall Comment']):
-                        st.markdown("**💬 Full Review Comment:**")
-                        st.markdown(f"*{row['Overall Comment']}*")
+                    if pd.notna(row['text_content']):
+                        st.markdown("**💬 Full Review:**")
+                        st.markdown(f"*{row['text_content']}*")
                     
                     # Lessons learned - parsed into likes and dislikes
-                    if pd.notna(row['Lessons Learned']):
-                        lessons = parse_lessons_learned(row['Lessons Learned'])
+                    if pd.notna(row['lessons_learned']):
+                        lessons = parse_lessons_learned(row['lessons_learned'])
                         st.markdown("**📚 Lessons Learned (from reviewer):**")
                         
                         if lessons['likes']:
@@ -658,7 +677,7 @@ def render(filtered_df, full_df):
                     
                     # Show detailed competitor reviews
                     for i, (idx, row) in enumerate(comp_reviews.iterrows(), 1):
-                        headline = row['Headline'] if pd.notna(row['Headline']) and str(row['Headline']).strip() else f"{competitor} Review"
+                        headline = row['headline'] if pd.notna(row['headline']) and str(row['headline']).strip() else f"{competitor} Review"
                         date_str = row['parsed_date'].strftime('%b %d, %Y') if pd.notna(row['parsed_date']) else 'Date N/A'
                         
                         with st.expander(f"📄 {competitor} Review #{i}: {headline} ({dim.replace('_', ' ').title()} Score: {row[dim]:.1f}/5)"):
@@ -667,17 +686,17 @@ def render(filtered_df, full_df):
                             with col_meta1:
                                 st.markdown(f"""
                                 **Reviewer Profile:**
-                                - Role: {row['Reviewer Role '] if pd.notna(row['Reviewer Role ']) else 'N/A'}
-                                - Industry: {row['Reviewer Industry'] if pd.notna(row['Reviewer Industry']) else 'N/A'}
-                                - Company Size: {row['Reviewer Firm Size'] if pd.notna(row['Reviewer Firm Size']) else 'N/A'}
+                                - Role: {row['reviewer_role'] if pd.notna(row['reviewer_role']) else 'N/A'}
+                                - Industry: {row['reviewer_industry'] if pd.notna(row['reviewer_industry']) else 'N/A'}
+                                - Company Size: {row['reviewer_firm_size'] if pd.notna(row['reviewer_firm_size']) else 'N/A'}
                                 """)
                             with col_meta2:
                                 st.markdown(f"""
                                 **Review Metrics:**
-                                - Overall Rating: ⭐ {row['Overall User Rating']}/5
+                                - Overall Rating: ⭐ {row['overall_rating']}/5
                                 - {dimension_labels[dim]}: {row[dim]:.1f}/5
                                 - Date: {date_str}
-                                - [View Original Review]({row['Review URL']})
+                                - [View Original Review]({row['review_url']})
                                 """)
                             
                             # AI insights from competitor review
@@ -692,9 +711,9 @@ def render(filtered_df, full_df):
                                     st.markdown(f"> {ai_parsed['reasoning'][:300]}...")
                             
                             # Full comment
-                            if pd.notna(row['Overall Comment']):
+                            if pd.notna(row['text_content']):
                                 st.markdown("**💬 Full Review:**")
-                                st.info(row['Overall Comment'])
+                                st.info(row['text_content'])
                             
                             # Topics discussed
                             if row.get('topics_list'):
@@ -710,8 +729,9 @@ def render(filtered_df, full_df):
                     if len(dayforce_in_dim) > 0:
                         st.markdown("*Bottom 3 Dayforce reviews in this dimension:*")
                         for idx, row in dayforce_in_dim.iterrows():
-                            headline = row['Headline'] if pd.notna(row['Headline']) and str(row['Headline']).strip() else "Dayforce Review"
-                            st.markdown(f"- **{headline}** - Score: {row[dim]:.1f}/5, Overall: {row['Overall User Rating']}/5")
+                            headline = row['headline'] if pd.notna(row['headline']) and str(row['headline']).strip() else "Dayforce Review"
+                            overall_rating = row['overall_rating'] if pd.notna(row['overall_rating']) else 'N/A'
+                            st.markdown(f"- **{headline}** - Score: {row[dim]:.1f}/5, Overall: {overall_rating}/5")
                     
                     st.markdown("---")
                     st.markdown("**💡 Strategic Action Items:**")
@@ -734,7 +754,7 @@ def render(filtered_df, full_df):
     with col_seg1:
         # By industry
         st.markdown("**Performance by Industry:**")
-        industry_perf = dayforce_df.groupby('Reviewer Industry')[dimensions].mean().mean(axis=1).sort_values(ascending=False)
+        industry_perf = dayforce_df.groupby('reviewer_industry')[dimensions].mean().mean(axis=1).sort_values(ascending=False)
         
         fig = px.bar(
             x=industry_perf.values,
@@ -752,7 +772,7 @@ def render(filtered_df, full_df):
     with col_seg2:
         # By company size
         st.markdown("**Performance by Company Size:**")
-        size_perf = dayforce_df.groupby('Reviewer Firm Size')[dimensions].mean().mean(axis=1).sort_values(ascending=False)
+        size_perf = dayforce_df.groupby('reviewer_firm_size')[dimensions].mean().mean(axis=1).sort_values(ascending=False)
         
         fig = px.bar(
             x=size_perf.values,

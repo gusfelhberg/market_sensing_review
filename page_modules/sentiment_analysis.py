@@ -216,7 +216,10 @@ def render(filtered_df, full_df):
                         previous_score = time_scores[dim].iloc[-2]
                         change = recent_score - previous_score
                         
-                        if abs(change) > 0.2:
+                        # Check if values are valid
+                        if pd.isna(change) or pd.isna(recent_score) or pd.isna(previous_score):
+                            st.info(f"➡️ **{dimension_labels[dim]}**: Insufficient data for trend analysis")
+                        elif abs(change) > 0.2:
                             if change > 0:
                                 st.success(f"📈 **{dimension_labels[dim]}**: Improving (+{change:.2f}) - from {previous_score:.2f} to {recent_score:.2f}")
                             else:

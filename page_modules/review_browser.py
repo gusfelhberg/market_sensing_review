@@ -1,33 +1,38 @@
 """
 Review Browser Page
-Browse and filter all reviews with full details
+Browse and filter all insights with full details and source information
 """
 
 import streamlit as st
 import pandas as pd
-from utils import get_sentiment_color, data_source_badge
-
-import streamlit as st
-import pandas as pd
+from utils import get_sentiment_color, data_source_badge, get_source_label, get_source_icon, get_source_badge
 import plotly.express as px
 import plotly.graph_objects as go
-from utils import get_sentiment_color, get_sentiment_label
 
 def render(filtered_df, full_df):
-    """Render the Review Browser page"""
+    """Render the Review Browser page with source awareness"""
     
-    st.title("📋 Review Browser")
-    st.markdown("*Browse and filter all reviews in the current selection*")
-    st.caption(f"Review content: {data_source_badge('customer_review')} | AI sentiment scores: {data_source_badge('ai_analysis')}")
+    st.title("📋 Data Browser")
+    st.markdown("*Browse and filter all insights from multiple sources*")
+    
+    # Show source breakdown
+    sources_present = filtered_df['source_type'].value_counts()
+    source_info = []
+    for source_type, count in sources_present.items():
+        icon = get_source_icon(source_type)
+        label = get_source_label(source_type)
+        source_info.append(f"{icon} {count} {label}")
+    
+    st.caption(f"📊 Sources: {' | '.join(source_info)}")
     
     # Dimensions for analysis
     dimensions = ['product', 'gtm', 'market_direction', 'implementation', 'customer_experience']
     dimension_labels = {
-        'product': 'Product (AI)',
-        'gtm': 'GTM (AI)',
-        'market_direction': 'Market Direction (AI)',
-        'implementation': 'Implementation (AI)',
-        'customer_experience': 'Customer Experience (AI)'
+        'product': 'Product',
+        'gtm': 'GTM',
+        'market_direction': 'Market Direction',
+        'implementation': 'Implementation',
+        'customer_experience': 'Customer Experience'
     }
     
     # Use the already-parsed topics_list from data loading
@@ -42,6 +47,15 @@ def render(filtered_df, full_df):
     filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
     
     with filter_col1:
+        # Source filter
+        source_options = ['All Sources'] + [get_source_label(st) for st in sources_present.index]
+        selected_source = st.selectbox(
+            "Source Type",
+            source_options,
+            key='review_browser_source'
+        )
+    
+    with filter_col2:
         # Product filter
         review_products = ['All'] + sorted(analysis_df['Product'].unique().tolist())
         selected_review_product = st.selectbox(
@@ -50,51 +64,47 @@ def render(filtered_df, full_df):
             key='review_browser_product'
         )
     
-    with filter_col2:
-        # Rating filter
-        rating_options = ['All', '5 Stars', '4 Stars', '3 Stars', '2 Stars', '1 Star']
-        selected_rating = st.selectbox(
-            "Rating",
-            rating_options,
-            key='review_browser_rating'
-        )
-    
     with filter_col3:
-        # Industry filter
-        review_industries = ['All'] + sorted(analysis_df['Reviewer Industry'].dropna().unique().tolist())
-        selected_review_industry = st.selectbox(
-            "Industry",
-            review_industries,
-            key='review_browser_industry'
-        )
+        # Rating filter (only for reviews with ratings)
+        has_ratings = 'overall_rating' in analysis_df.columns and analysis_df['overall_rating'].notna().any()
+        if has_ratings:
+            rating_options = ['All', '5 Stars', '4 Stars', '3 Stars', '2 Stars', '1 Star']
+            selected_rating = st.selectbox(
+                "Rating",
+                rating_options,
+                key='review_browser_rating'
+            )
+        else:
+            st.markdown("**Rating**")
+            st.caption("N/A")
+            selected_rating = 'All'
     
     with filter_col4:
-        # Company size filter
-        review_sizes = ['All'] + sorted(analysis_df['Reviewer Firm Size'].dropna().unique().tolist())
-        selected_review_size = st.selectbox(
-            "Company Size",
-            review_sizes,
-            key='review_browser_size'
+        # Dimension filter
+        dim_options = ['All Dimensions'] + [dimension_labels[d] for d in dimensions]
+        selected_dimension = st.selectbox(
+            "Focus Dimension",
+            dim_options,
+            key='review_browser_dimension'
         )
     
     # Apply filters
     browse_df = analysis_df.copy()
     
+    if selected_source != 'All Sources':
+        source_type_map = {get_source_label(st): st for st in sources_present.index}
+        selected_source_type = source_type_map[selected_source]
+        browse_df = browse_df[browse_df['source_type'] == selected_source_type]
+    
     if selected_review_product != 'All':
         browse_df = browse_df[browse_df['Product'] == selected_review_product]
     
-    if selected_rating != 'All':
+    if selected_rating != 'All' and has_ratings:
         rating_value = int(selected_rating.split()[0])
-        browse_df = browse_df[browse_df['Overall User Rating'] == rating_value]
-    
-    if selected_review_industry != 'All':
-        browse_df = browse_df[browse_df['Reviewer Industry'] == selected_review_industry]
-    
-    if selected_review_size != 'All':
-        browse_df = browse_df[browse_df['Reviewer Firm Size'] == selected_review_size]
+        browse_df = browse_df[browse_df['overall_rating'] == rating_value]
     
     # Display summary
-    st.markdown(f"**Showing {len(browse_df)} of {len(analysis_df)} reviews**")
+    st.markdown(f"**Showing {len(browse_df)} of {len(analysis_df)} insights**")
     
     # Sorting options
     sort_col1, sort_col2 = st.columns([3, 1])
@@ -121,9 +131,11 @@ def render(filtered_df, full_df):
     elif sort_by == 'Review Date (Oldest)':
         browse_df = browse_df.sort_values('parsed_date', ascending=True)
     elif sort_by == 'Rating (Highest)':
-        browse_df = browse_df.sort_values('Overall User Rating', ascending=False)
+        # Only sort rows that have ratings (exclude analyst insights)
+        browse_df = browse_df.sort_values('overall_rating', ascending=False, na_position='last')
     elif sort_by == 'Rating (Lowest)':
-        browse_df = browse_df.sort_values('Overall User Rating', ascending=True)
+        # Only sort rows that have ratings (exclude analyst insights)
+        browse_df = browse_df.sort_values('overall_rating', ascending=True, na_position='last')
     elif sort_by == 'Product Sentiment (Highest)':
         browse_df = browse_df.sort_values('product', ascending=False)
     elif sort_by == 'Product Sentiment (Lowest)':
@@ -156,46 +168,69 @@ def render(filtered_df, full_df):
             avg_sentiment = row[dimensions].mean()
             sentiment_color = get_sentiment_color(avg_sentiment)
             
+            # Get source badge
+            source_badge = get_source_badge(row.get('source_type', 'N/A'))
+            
+            # Format rating display (N/A for analyst insights)
+            overall_rating = row.get('overall_rating')
+            rating_display = f"{overall_rating}/5" if pd.notna(overall_rating) else "N/A"
+            
+            # Format date display
+            date_value = row.get('parsed_date')
+            date_display = date_value.strftime('%Y-%m-%d') if pd.notna(date_value) else "N/A"
+            
+            # Get metadata with fallbacks
+            product = row.get('Product', 'N/A')
+            reviewer_industry = row.get('reviewer_industry', 'N/A')
+            reviewer_size = row.get('reviewer_firm_size', 'N/A')
+            
             # Create review card
             with st.expander(
-                f"⭐ {row['Overall User Rating']}/5 | {row['Product']} | {row['Review Date']} | {row['Reviewer Industry']} | {row['Reviewer Firm Size']}",
+                f"{source_badge} | ⭐ {rating_display} | {product} | {date_display} | {reviewer_industry} | {reviewer_size}",
                 expanded=False
             ):
                 # Header with key info
                 header_cols = st.columns([2, 1, 1])
                 
                 with header_cols[0]:
-                    st.markdown(f"### {row['Headline']}")
+                    headline = row.get('headline', 'Review')
+                    st.markdown(f"### {headline}")
                 
                 with header_cols[1]:
-                    st.metric("Overall Rating (Reviewer)", f"{row['Overall User Rating']}/5")
+                    st.metric("Overall Rating", rating_display)
                 
                 with header_cols[2]:
                     st.metric("Avg AI Sentiment", f"{avg_sentiment:.2f}")
                 
                 st.markdown("---")
                 
-                # Reviewer details
+                # Reviewer/Source details
                 detail_cols = st.columns(4)
                 with detail_cols[0]:
-                    st.markdown(f"**Role:** {row['Reviewer Role ']}")
+                    reviewer_role = row.get('reviewer_role', row.get('analyst_name', 'N/A'))
+                    st.markdown(f"**Role/Analyst:** {reviewer_role}")
                 with detail_cols[1]:
-                    st.markdown(f"**Function:** {row['Reviewer Function']}")
+                    firm_or_function = row.get('analyst_firm', row.get('Reviewer Function', 'N/A'))
+                    st.markdown(f"**Firm/Function:** {firm_or_function}")
                 with detail_cols[2]:
-                    st.markdown(f"**Industry:** {row['Reviewer Industry']}")
+                    reviewer_industry = row.get('reviewer_industry', 'N/A')
+                    st.markdown(f"**Industry:** {reviewer_industry}")
                 with detail_cols[3]:
-                    st.markdown(f"**Size:** {row['Reviewer Firm Size']}")
+                    reviewer_size = row.get('reviewer_firm_size', 'N/A')
+                    st.markdown(f"**Size:** {reviewer_size}")
                 
                 st.markdown("---")
                 
-                # Review content
-                st.markdown("**Overall Comment:**")
-                st.markdown(row['Overall Comment'])
+                # Review/Insight content
+                st.markdown("**Content:**")
+                text_content = row.get('text_content', 'N/A')
+                st.markdown(text_content)
                 
-                if pd.notna(row.get('Lessons Learned')):
+                lessons_learned = row.get('lessons_learned')
+                if pd.notna(lessons_learned) and str(lessons_learned).strip():
                     st.markdown("---")
                     st.markdown("**Lessons Learned:**")
-                    st.markdown(row['Lessons Learned'])
+                    st.markdown(lessons_learned)
                 
                 st.markdown("---")
                 
