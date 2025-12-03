@@ -432,7 +432,16 @@ def render_admin_feedback_dashboard():
             
             with col1:
                 st.markdown(f"**Section:** {row['section']}")
-                st.markdown(f"**Page:** {row['page']}" + (f" > {row['tab']}" if row['tab'] else "") + (f" > {row['subtab']}" if row['subtab'] else ""))
+                
+                # Build page path, filtering out NaN/empty values
+                page_parts = [str(row['page'])]
+                if pd.notna(row['tab']) and str(row['tab']).strip() and str(row['tab']) != 'nan':
+                    page_parts.append(str(row['tab']))
+                if pd.notna(row['subtab']) and str(row['subtab']).strip() and str(row['subtab']) != 'nan':
+                    page_parts.append(str(row['subtab']))
+                
+                page_path = " > ".join(page_parts)
+                st.markdown(f"**Page:** {page_path}")
             
             with col2:
                 st.markdown(f"""
