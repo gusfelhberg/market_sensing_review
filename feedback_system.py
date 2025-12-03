@@ -100,8 +100,12 @@ def update_feedback(timestamp: str, username: str, new_text: str):
     init_feedback_storage()
     df = pd.read_csv(FEEDBACK_FILE)
     
+    # Convert timestamp to string for comparison (in case it's a datetime object)
+    timestamp_str = str(timestamp) if not isinstance(timestamp, str) else timestamp
+    
     # Find the feedback entry by timestamp and username
-    mask = (df['timestamp'] == timestamp) & (df['username'] == username)
+    # Compare timestamps as strings to handle both string and datetime inputs
+    mask = (df['timestamp'].astype(str) == timestamp_str) & (df['username'] == username)
     
     if mask.any():
         df.loc[mask, 'feedback_text'] = new_text
@@ -114,8 +118,12 @@ def delete_feedback(timestamp: str, username: str):
     init_feedback_storage()
     df = pd.read_csv(FEEDBACK_FILE)
     
+    # Convert timestamp to string for comparison (in case it's a datetime object)
+    timestamp_str = str(timestamp) if not isinstance(timestamp, str) else timestamp
+    
     # Remove the feedback entry by timestamp and username
-    mask = (df['timestamp'] == timestamp) & (df['username'] == username)
+    # Compare timestamps as strings to handle both string and datetime inputs
+    mask = (df['timestamp'].astype(str) == timestamp_str) & (df['username'] == username)
     df = df[~mask]
     
     df.to_csv(FEEDBACK_FILE, index=False)
@@ -228,15 +236,13 @@ def show_feedback_viewer_modal(section: str):
                         with col_edit:
                             if st.button("✏️ Edit", key=f"btn_edit_{edit_key}", use_container_width=True):
                                 st.session_state[f"editing_{edit_key}"] = True
-                                st.rerun()
                         
                         with col_delete:
                             if st.button("🗑️ Delete", key=f"btn_delete_{delete_key}", type="secondary", use_container_width=True):
                                 if delete_feedback(row['timestamp'], username):
                                     st.success("✅ Feedback deleted!")
                                     import time
-                                    time.sleep(1)
-                                    st.rerun()
+                                    time.sleep(0.5)
                     else:
                         # Edit mode
                         new_text = st.text_area(
@@ -253,16 +259,12 @@ def show_feedback_viewer_modal(section: str):
                                     if update_feedback(row['timestamp'], username, new_text.strip()):
                                         st.success("✅ Feedback updated!")
                                         st.session_state[f"editing_{edit_key}"] = False
-                                        import time
-                                        time.sleep(1)
-                                        st.rerun()
                                 else:
                                     st.error("⚠️ Feedback cannot be empty")
                         
                         with col_cancel:
                             if st.button("❌ Cancel", key=f"btn_cancel_{edit_key}", use_container_width=True):
                                 st.session_state[f"editing_{edit_key}"] = False
-                                st.rerun()
                 else:
                     # Admin view or other user's feedback - just display
                     st.markdown(f"""
