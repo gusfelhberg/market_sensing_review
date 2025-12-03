@@ -11,23 +11,41 @@ from plotly.subplots import make_subplots
 from utils import get_sentiment_color, get_source_label, get_source_icon, get_source_color, get_source_type_config
 from collections import Counter
 import numpy as np
+import feedback_system
 
 def render(filtered_df, full_df):
     """Render the Strategic Overview page with multi-source intelligence"""
     
-    st.header("🌟 Strategic Overview")
+    # Page header with inline feedback buttons
+    col1, col2, col3 = st.columns([8, 1.2, 1.2])
+    with col1:
+        st.header("🌟 Strategic Overview")
+    with col2:
+        if st.button("💬 Feedback", key="feedback_btn_strategic", type="primary"):
+            feedback_system.show_feedback_modal("Strategic Overview", "Strategic Overview", "", "")
+    with col3:
+        username = feedback_system.auth.get_current_user()
+        is_admin = feedback_system.auth.is_admin()
+        feedback_count = len(feedback_system.get_section_feedback("Strategic Overview", None if is_admin else username))
+        if is_admin:
+            view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+        else:
+            view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+        if st.button(view_label, key="view_feedback_btn_strategic", type="primary", help="View feedback"):
+            feedback_system.show_feedback_viewer_modal("Strategic Overview")
+    
     st.markdown("**Unified intelligence across customer reviews and analyst perspectives**")
     
     # Check what sources we have
     sources_present = filtered_df['source_type'].unique()
     has_multiple_sources = len(sources_present) > 1
     
-    if has_multiple_sources:
-        st.info("📊 **Multi-Source View Active** - Analyzing insights from multiple perspectives for comprehensive intelligence")
-    else:
-        source_label = get_source_label(sources_present[0])
-        source_icon = get_source_icon(sources_present[0])
-        st.info(f"{source_icon} **Single Source View** - Viewing {source_label} only. Use sidebar filter to view all sources.")
+    # if has_multiple_sources:
+    #     st.info("📊 **Multi-Source View Active** - Analyzing insights from multiple perspectives for comprehensive intelligence")
+    # else:
+    #     source_label = get_source_label(sources_present[0])
+    #     source_icon = get_source_icon(sources_present[0])
+    #     st.info(f"{source_icon} **Single Source View** - Viewing {source_label} only. Use sidebar filter to view all sources.")
     
     # Key metrics row
     st.markdown("### 📊 Intelligence Summary")
@@ -77,7 +95,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 1: UNIFIED SENTIMENT =====
     with tab1:
-        st.subheader("Unified Sentiment Dashboard")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("Unified Sentiment Dashboard")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_unified_sentiment", type="primary"):
+                feedback_system.show_feedback_modal("Strategic Overview > Unified Sentiment", "Strategic Overview", "Unified Sentiment", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Strategic Overview > Unified Sentiment", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_unified_sentiment", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Strategic Overview > Unified Sentiment")
+        
         st.markdown("*Combined view across all sources for comprehensive perception*")
         
         # Focus on Dayforce
@@ -212,7 +247,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 2: SOURCE COMPARISON =====
     with tab2:
-        st.subheader("Source Comparison Analysis")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("Source Comparison Analysis")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_source_comparison", type="primary"):
+                feedback_system.show_feedback_modal("Strategic Overview > Source Comparison", "Strategic Overview", "Source Comparison", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Strategic Overview > Source Comparison", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_source_comparison", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Strategic Overview > Source Comparison")
+        
         st.markdown("*Side-by-side comparison of customer and analyst perspectives*")
         
         if not has_multiple_sources:
@@ -310,7 +362,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 3: KEY INSIGHTS =====
     with tab3:
-        st.subheader("Key Strategic Insights")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("Key Strategic Insights")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_key_insights", type="primary"):
+                feedback_system.show_feedback_modal("Strategic Overview > Key Insights", "Strategic Overview", "Key Insights", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Strategic Overview > Key Insights", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_key_insights", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Strategic Overview > Key Insights")
+        
         st.markdown("*Critical findings synthesized across all sources*")
         
         dayforce_df = filtered_df[filtered_df['Product'] == 'Dayforce']
@@ -415,7 +484,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 4: TOPIC ANALYSIS =====
     with tab4:
-        st.subheader("Cross-Source Topic Analysis")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("Cross-Source Topic Analysis")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_topic_analysis", type="primary"):
+                feedback_system.show_feedback_modal("Strategic Overview > Topic Analysis", "Strategic Overview", "Topic Analysis", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Strategic Overview > Topic Analysis", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_topic_analysis", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Strategic Overview > Topic Analysis")
+        
         st.markdown("*What themes emerge across different intelligence sources?*")
         
         dayforce_df = filtered_df[filtered_df['Product'] == 'Dayforce']

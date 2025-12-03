@@ -19,19 +19,34 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Import authentication and feedback system
+import auth
+import feedback_system
+
+# Initialize session state for authentication
+auth.init_session_state()
+
+# Check if user is authenticated
+if not auth.is_authenticated():
+    auth.render_login_page()
+    st.stop()
+
 # Custom CSS for better styling
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 4.5rem;
         font-weight: bold;
         color: #1f77b4;
-        margin-bottom: 0;
+        margin-bottom: 10px;
+        line-height: 1.2;
     }
     .sub-header {
-        font-size: 1.2rem;
+        font-size: 2rem;
         color: #666;
         margin-top: 0;
+        margin-bottom: 40px;
+        font-weight: 500;
     }
     .metric-card {
         background-color: #f0f2f6;
@@ -55,84 +70,28 @@ st.markdown("""
     }
     /* Make tab text bigger and more visible */
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.1rem;
+        font-size: 1.3rem;
         font-weight: 600;
     }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+        gap: 10px;
     }
     .stTabs [data-baseweb="tab-list"] button {
-        padding: 10px 20px;
+        padding: 12px 24px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # Import utility functions
 from utils import load_unified_data, parse_ai_output, get_sentiment_color, format_date, get_source_type_config, get_source_label, get_source_icon
-import os
-
-# Initialize session state
-if 'data' not in st.session_state:
-    st.session_state.data = None
-
-# Check if data files exist
-GARTNER_FILE = 'data/market_sensing_data_ai_output_gartner.xlsx'
-ANALYST_FILE = 'data/market_sensing_data_ai_output_analyst.xlsx'
-
-files_exist = os.path.exists(GARTNER_FILE) and os.path.exists(ANALYST_FILE)
 
 # Load unified multi-source data
 @st.cache_data
 def get_data():
     return load_unified_data()
 
-# Try to load data if files exist
-if files_exist:
-    try:
-        df = get_data()
-        st.session_state.data = df
-        data_loaded = True
-    except Exception as e:
-        st.error(f"⚠️ Error loading data files: {str(e)}")
-        st.info("The data files exist but couldn't be loaded. Please check file format or upload new files below.")
-        data_loaded = False
-        df = None
-else:
-    data_loaded = False
-    df = None
-
-# Show appropriate UI based on data availability
-if not data_loaded:
-    # Show prominent upload interface when no data is available
-    st.sidebar.markdown("## 📤 Upload Data Files")
-    st.sidebar.warning("⚠️ No data files found!")
-    st.sidebar.info("Please upload your data files to get started.")
-    
-    from file_upload_utils import render_file_upload_section
-    render_file_upload_section()
-    
-    # Show main message
-    st.markdown('<p class="main-header">HCM Market Intelligence Platform</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Multi-Source Strategic Intelligence for Dayforce Excellence</p>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div style="background-color: #fff3cd; padding: 30px; border-radius: 10px; border-left: 5px solid #ffc107; margin: 40px 0; text-align: center;">
-        <h2>📊 Welcome to the HCM Market Intelligence Platform</h2>
-        <p style="font-size: 1.1rem; margin: 20px 0;">
-            To begin your analysis, please upload your data files using the sidebar.
-        </p>
-        <p style="font-size: 1rem; color: #666;">
-            <strong>Step 1:</strong> Download the templates from the sidebar<br/>
-            <strong>Step 2:</strong> Prepare your data following the template format<br/>
-            <strong>Step 3:</strong> Upload your files and validate them<br/>
-            <strong>Step 4:</strong> Click "Load Uploaded Files" to start analyzing
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.stop()
-
-# Data loaded successfully - show normal interface
+# Load data
+df = get_data()
 # Sidebar header
 st.sidebar.markdown("## 📂 Data Sources")
 
@@ -147,37 +106,8 @@ for source_type, count in source_counts.items():
 
 st.sidebar.markdown("---")
 
-# Source filter
-source_options = ['All Sources'] + [
-    f"{get_source_icon(st)} {get_source_label(st)}"
-    for st in df['source_type'].unique()
-]
-
-selected_source_display = st.sidebar.selectbox(
-    "Filter by Source",
-    options=source_options,
-    help="Filter all analysis to specific source type"
-)
-
-# Map display back to source type
-if selected_source_display == 'All Sources':
-    selected_source = None
-else:
-    # Extract source type from display string
-    for source_type in df['source_type'].unique():
-        if get_source_label(source_type) in selected_source_display:
-            selected_source = source_type
-            break
-
-st.sidebar.markdown("---")
-
-# Apply source filter
-if selected_source:
-    filtered_df = df[df['source_type'] == selected_source].copy()
-    st.sidebar.info(f"Viewing: {get_source_label(selected_source)} only")
-else:
-    filtered_df = df.copy()
-    st.sidebar.info("Viewing: All Sources combined")
+# No source filter - use all data
+filtered_df = df.copy()
 
 # Sidebar - Data Statistics
 st.sidebar.header("📊 Dataset Overview")
@@ -204,54 +134,12 @@ if len(filtered_df) > 0:
     for product, count in product_counts.items():
         st.sidebar.text(f"• {product}: {count}")
 
-# File upload section (collapsed by default when data exists)
-st.sidebar.markdown("---")
-from file_upload_utils import render_file_upload_section
-render_file_upload_section()
+# User info and logout button in sidebar
+auth.render_user_info_sidebar()
 
 # Main content
-st.markdown('<p class="main-header">HCM Market Intelligence Platform</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Source Strategic Intelligence for Dayforce Excellence</p>', unsafe_allow_html=True)
-
-# Data scope message with source breakdown
-dayforce_count = len(filtered_df[filtered_df['Product'] == 'Dayforce'])
-competitor_count = len(filtered_df[filtered_df['Product'] != 'Dayforce'])
-
-# Get source breakdown
-if selected_source:
-    source_label = get_source_label(selected_source)
-    source_icon = get_source_icon(selected_source)
-    competitor_names = sorted([p for p in filtered_df['Product'].unique() if p != 'Dayforce'])
-    
-    if competitor_names:
-        st.markdown(f"""
-        <div style="background-color: #d1ecf1; padding: 12px; border-radius: 5px; margin-bottom: 20px; text-align: center; border-left: 4px solid #0c5460;">
-            {source_icon} <strong>{source_label} Analysis</strong> - {dayforce_count} Dayforce insights + {competitor_count} competitor insights ({', '.join(competitor_names)})
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div style="background-color: #d1ecf1; padding: 12px; border-radius: 5px; margin-bottom: 20px; text-align: center; border-left: 4px solid #0c5460;">
-            {source_icon} <strong>{source_label} Analysis</strong> - {dayforce_count} Dayforce insights
-        </div>
-        """, unsafe_allow_html=True)
-else:
-    # Multi-source view
-    source_breakdown = []
-    for source_type in df['source_type'].unique():
-        count = len(filtered_df[filtered_df['source_type'] == source_type])
-        icon = get_source_icon(source_type)
-        label = get_source_label(source_type)
-        source_breakdown.append(f"{icon} {count} {label}")
-    
-    competitor_names = sorted([p for p in filtered_df['Product'].unique() if p != 'Dayforce'])
-    
-    st.markdown(f"""
-    <div style="background-color: #d1ecf1; padding: 12px; border-radius: 5px; margin-bottom: 20px; text-align: center; border-left: 4px solid #0c5460;">
-        📊 <strong>Multi-Source Intelligence</strong> - {dayforce_count} Dayforce + {competitor_count} Competitor insights<br/>
-        <small>{' | '.join(source_breakdown)}</small>
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown('<h1 style="font-size: 3.5rem; font-weight: bold; color: #1f77b4; margin-bottom: 0px; line-height: 1.1;">HCM Market Intelligence Platform</h1>', unsafe_allow_html=True)
+st.markdown('<h2 style="font-size: 1.8rem; color: #666; margin-top: 5px; margin-bottom: 30px; font-weight: 400;">Multi-Source Strategic Intelligence for Dayforce Excellence</h2>', unsafe_allow_html=True)
 
 # Initialize session state for active tab (helps reduce tab jumps on first interaction)
 if 'initialized' not in st.session_state:
@@ -268,8 +156,15 @@ tab_options = [
     "📋 Browse Data"
 ]
 
+# Add Admin Feedback Dashboard tab if user is admin
+if auth.is_admin():
+    tab_options.append("🔑 Admin Feedback")
+
 # Create tabs with explicit selection tracking
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(tab_options)
+if auth.is_admin():
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(tab_options)
+else:
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(tab_options)
 
 # Import page modules
 from page_modules import strategic_overview, analyst_intelligence, dayforce_focus, sentiment_analysis, topic_intelligence, action_recommendations, review_browser
@@ -295,3 +190,8 @@ with tab6:
 
 with tab7:
     review_browser.render(filtered_df, df)
+
+# Admin-only feedback dashboard tab
+if auth.is_admin():
+    with tab8:
+        feedback_system.render_admin_feedback_dashboard()

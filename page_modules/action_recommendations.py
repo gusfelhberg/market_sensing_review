@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from utils import identify_improvement_opportunities, extract_pain_points, get_sentiment_color, data_source_badge, get_source_label, get_source_icon
+import feedback_system
 
 
 def _clean_text(value, default=""):
@@ -34,7 +35,24 @@ def _safe_extract_text(row, keys, default):
 def render(filtered_df, full_df):
     """Render the Action Insights page with multi-source intelligence"""
     
-    st.header("🎬 Action Insights")
+    # Page header with inline feedback buttons
+    col1, col2, col3 = st.columns([8, 1.2, 1.2])
+    with col1:
+        st.header("🎬 Action Insights")
+    with col2:
+        if st.button("💬 Feedback", key="feedback_btn_action", type="primary"):
+            feedback_system.show_feedback_modal("Action Insights", "Action Insights", "", "")
+    with col3:
+        username = feedback_system.auth.get_current_user()
+        is_admin = feedback_system.auth.is_admin()
+        feedback_count = len(feedback_system.get_section_feedback("Action Insights", None if is_admin else username))
+        if is_admin:
+            view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+        else:
+            view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+        if st.button(view_label, key="view_feedback_btn_action", type="primary", help="View feedback"):
+            feedback_system.show_feedback_viewer_modal("Action Insights")
+    
     st.markdown("**Strategic improvement opportunities synthesized from multiple intelligence sources**")
     
     # Focus on Dayforce
@@ -137,7 +155,7 @@ def render(filtered_df, full_df):
                 
                 # Show sub-dimension breakdown
                 st.markdown("### � Sub-Dimension Analysis")
-                st.caption(data_source_badge('ai_analysis'))
+                # st.caption(data_source_badge('ai_analysis'))
                 
                 # Get sub-dimensions for this opportunity
                 sub_dims = opp.get('sub_dimension_scores', {})

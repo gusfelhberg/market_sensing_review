@@ -11,13 +11,14 @@ from plotly.subplots import make_subplots
 from utils import get_sentiment_color, get_sentiment_label, data_source_badge, get_sub_dimensions_for_dimension
 from collections import Counter
 import numpy as np
+import feedback_system
 
 def render(filtered_df, full_df):
     """Render the Enhanced Sentiment Analysis page"""
     
     st.header("🎯 Strategic Sentiment Analysis")
     st.markdown("**Granular analysis across 5 dimensions and 15 sub-dimensions with actionable insights**")
-    st.caption(data_source_badge('ai_analysis'))
+    # st.caption(data_source_badge('ai_analysis'))
     
     # Product selector (default to Dayforce when available)
     available_products = sorted([p for p in filtered_df['Product'].dropna().unique()])
@@ -55,7 +56,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 1: SUB-DIMENSION OVERVIEW =====
     with tab1:
-        st.subheader("15 Sub-Dimensions Performance Heatmap")
+        # Title with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("15 Sub-Dimensions Performance Heatmap")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_subdim_overview", type="primary"):
+                feedback_system.show_feedback_modal("Customer Voice > Sub-Dimension Overview", "Customer Voice", "Sub-Dimension Overview", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Customer Voice > Sub-Dimension Overview", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_subdim_overview", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Customer Voice > Sub-Dimension Overview")
+        
         st.markdown("*Identify specific areas of strength and weakness at a glance*")
         
         # Create sub-dimension performance matrix
@@ -144,7 +162,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 2: TREND ANALYSIS =====
     with tab2:
-        st.subheader("📈 Sentiment Trends Over Time")
+        # Title with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("📈 Sentiment Trends Over Time")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_trend_analysis", type="primary"):
+                feedback_system.show_feedback_modal("Customer Voice > Trend Analysis", "Customer Voice", "Trend Analysis", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Customer Voice > Trend Analysis", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_trend_analysis", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Customer Voice > Trend Analysis")
+        
         st.markdown("*Track how sentiment changes across dimensions to identify deteriorating areas*")
         
         # Add time period selector
@@ -231,7 +266,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 3: ROOT CAUSE ANALYSIS =====
     with tab3:
-        st.subheader("🔍 Root Cause Analysis")
+        # Title with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("🔍 Root Cause Analysis")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_root_cause", type="primary"):
+                feedback_system.show_feedback_modal("Customer Voice > Root Cause Analysis", "Customer Voice", "Root Cause Analysis", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Customer Voice > Root Cause Analysis", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_root_cause", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Customer Voice > Root Cause Analysis")
+        
         st.markdown("*Understand WHY scores are low by analyzing associated topics and sub-dimensions*")
         
         # Dimension selector
@@ -386,7 +438,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 4: COMPETITIVE CONTEXT =====
     with tab4:
-        st.subheader("⚔️ Competitive Benchmark")
+        # Title with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("⚔️ Competitive Benchmark")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_competitive", type="primary"):
+                feedback_system.show_feedback_modal("Customer Voice > Competitive Context", "Customer Voice", "Competitive Context", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Customer Voice > Competitive Context", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_competitive", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Customer Voice > Competitive Context")
+        
         st.markdown(f"*How does {selected_product} compare to competitors at the sub-dimension level?*")
 
         competitors_df = filtered_df[filtered_df['Product'] != selected_product]

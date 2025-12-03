@@ -2,7 +2,7 @@ import pandas as pd
 import json
 
 # Load the Excel file
-df = pd.read_excel('market_sensing_data_gartner_ai_sentiment.xlsx')
+df = pd.read_excel('data/market_sensing_data_gartner_ai_sentiment.xlsx')
 
 # Display basic information
 print("=" * 80)

@@ -21,6 +21,7 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
+import feedback_system
 
 def calculate_topic_overlap(df1, df2):
     """Calculate percentage of topics that appear in both dataframes"""
@@ -275,7 +276,24 @@ def render(filtered_df, full_df):
         else:
             filtered_df['parsed_date'] = pd.NaT
     
-    st.header("💡 Topic Intelligence")
+    # Page header with inline feedback buttons
+    col1, col2, col3 = st.columns([8, 1.2, 1.2])
+    with col1:
+        st.header("💡 Topic Intelligence")
+    with col2:
+        if st.button("💬 Feedback", key="feedback_btn_topic", type="primary"):
+            feedback_system.show_feedback_modal("Topic Intelligence", "Topic Intelligence", "", "")
+    with col3:
+        username = feedback_system.auth.get_current_user()
+        is_admin = feedback_system.auth.is_admin()
+        feedback_count = len(feedback_system.get_section_feedback("Topic Intelligence", None if is_admin else username))
+        if is_admin:
+            view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+        else:
+            view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+        if st.button(view_label, key="view_feedback_btn_topic", type="primary", help="View feedback"):
+            feedback_system.show_feedback_viewer_modal("Topic Intelligence")
+    
     st.markdown("**Understand what customers and analysts are discussing and their perspectives**")
     
     # Show source breakdown
@@ -565,7 +583,7 @@ def render(filtered_df, full_df):
         
         # Deep dive into specific topic
         st.subheader("🔍 Topic Deep Dive")
-        st.caption(f"{data_source_badge('ai_analysis')} | Review content: {data_source_badge('customer_review')}")
+        # st.caption(f"{data_source_badge('ai_analysis')} | Review content: {data_source_badge('customer_review')}")
         
         # Get all unique topics from analysis_df (respects product filter)
         all_topics_filtered = []

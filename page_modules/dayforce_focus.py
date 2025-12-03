@@ -10,11 +10,29 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from utils import get_sentiment_color, get_sentiment_label, extract_pain_points, data_source_badge, parse_lessons_learned, get_source_label, get_source_icon, get_source_type_config
 from collections import Counter
+import feedback_system
 
 def render(filtered_df, full_df):
     """Render the Dayforce Focus page"""
     
-    st.header("🎯 Dayforce Strategic Intelligence")
+    # Page header with inline feedback buttons
+    col1, col2, col3 = st.columns([8, 1.2, 1.2])
+    with col1:
+        st.header("🎯 Dayforce Strategic Intelligence")
+    with col2:
+        if st.button("💬 Feedback", key="feedback_btn_dayforce", type="primary"):
+            feedback_system.show_feedback_modal("Dayforce Focus", "Dayforce Focus", "", "")
+    with col3:
+        username = feedback_system.auth.get_current_user()
+        is_admin = feedback_system.auth.is_admin()
+        feedback_count = len(feedback_system.get_section_feedback("Dayforce Focus", None if is_admin else username))
+        if is_admin:
+            view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+        else:
+            view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+        if st.button(view_label, key="view_feedback_btn_dayforce", type="primary", help="View feedback"):
+            feedback_system.show_feedback_viewer_modal("Dayforce Focus")
+    
     st.markdown("**Dayforce performance with competitive context and multi-source insights**")
     
     # Get Dayforce data
@@ -95,7 +113,7 @@ def render(filtered_df, full_df):
     with col_main:
         # Competitive positioning chart
         st.subheader("📈 Dayforce vs Competition")
-        st.caption(data_source_badge('ai_analysis'))
+        # st.caption(data_source_badge('ai_analysis'))
         
         # Add view selector
         view_mode = st.radio(
@@ -173,7 +191,7 @@ def render(filtered_df, full_df):
         
         # Where We Win vs Where We Lose
         st.subheader("💪 Competitive Advantages & Gaps")
-        st.caption(data_source_badge('ai_analysis'))
+        # st.caption(data_source_badge('ai_analysis'))
         
         col_win, col_lose = st.columns(2)
         
@@ -252,7 +270,7 @@ def render(filtered_df, full_df):
     
     with col_sidebar:
         st.subheader("📌 Key Insights")
-        st.caption(data_source_badge('ai_analysis'))
+        # st.caption(data_source_badge('ai_analysis'))
         
         # Overall position
         dayforce_overall = dayforce_df[dimensions].mean().mean()
@@ -300,7 +318,24 @@ def render(filtered_df, full_df):
     tab1, tab2, tab3 = st.tabs(["Customer Pain Points", "Customer Strengths", "Competitive Intelligence"])
     
     with tab1:
-        st.markdown("### 😣 Critical Issues from Customer Reviews")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.markdown("### 😣 Critical Issues from Customer Reviews")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_pain_points", type="primary"):
+                feedback_system.show_feedback_modal("Dayforce Focus > Customer Pain Points", "Dayforce Focus", "Customer Pain Points", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Dayforce Focus > Customer Pain Points", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_pain_points", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Dayforce Focus > Customer Pain Points")
+        
         st.markdown("*Each issue is linked to a specific customer review with actionable details*")
         
         pain_points = extract_pain_points(dayforce_df, 'Dayforce')
@@ -451,7 +486,24 @@ def render(filtered_df, full_df):
             st.success("✅ No significant pain points found! All reviews show healthy sub-dimension scores.")
     
     with tab2:
-        st.markdown("### ✨ What Customers Love About Dayforce")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.markdown("### ✨ What Customers Love About Dayforce")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_strengths", type="primary"):
+                feedback_system.show_feedback_modal("Dayforce Focus > Customer Strengths", "Dayforce Focus", "Customer Strengths", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Dayforce Focus > Customer Strengths", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_strengths", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Dayforce Focus > Customer Strengths")
+        
         st.markdown("*Detailed analysis of positive feedback with specific sub-dimension strengths*")
         
         # Extract positive reviews (4+ rating) and high-scoring sub-dimensions (4.0+)
@@ -639,7 +691,24 @@ def render(filtered_df, full_df):
             st.info("No highly-rated reviews in current selection")
     
     with tab3:
-        st.markdown("### 🥊 Competitive Intelligence")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.markdown("### 🥊 Competitive Intelligence")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_competitive_intel", type="primary"):
+                feedback_system.show_feedback_modal("Dayforce Focus > Competitive Intelligence", "Dayforce Focus", "Competitive Intelligence", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Dayforce Focus > Competitive Intelligence", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_competitive_intel", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Dayforce Focus > Competitive Intelligence")
+        
         st.markdown("*Detailed analysis of where competitors excel - learn from their customer feedback*")
         
         # For each gap, show what competitors are doing well

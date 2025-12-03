@@ -20,7 +20,7 @@ def render(filtered_df, full_df):
     
     st.header("📈 Executive Summary")
     st.markdown("**Strategic overview of customer sentiment and market position**")
-    st.caption(f"{data_source_badge('customer_review')} for ratings | {data_source_badge('ai_analysis')} for sentiment dimensions")
+    # st.caption(f"{data_source_badge('customer_review')} for ratings | {data_source_badge('ai_analysis')} for sentiment dimensions")
     
     # Display data scope indicator
     products_in_view = sorted(filtered_df['Product'].unique().tolist())

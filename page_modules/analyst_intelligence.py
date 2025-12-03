@@ -11,11 +11,29 @@ from plotly.subplots import make_subplots
 from utils import get_sentiment_color, get_source_icon
 from collections import Counter
 import numpy as np
+import feedback_system
 
 def render(filtered_df, full_df):
     """Render the Analyst Intelligence page"""
     
-    st.header("🎓 Analyst Intelligence")
+    # Page header with inline feedback buttons
+    col1, col2, col3 = st.columns([8, 1.2, 1.2])
+    with col1:
+        st.header("🎓 Analyst Intelligence")
+    with col2:
+        if st.button("💬 Feedback", key="feedback_btn_analyst", type="primary"):
+            feedback_system.show_feedback_modal("Analyst Intelligence", "Analyst Intelligence", "", "")
+    with col3:
+        username = feedback_system.auth.get_current_user()
+        is_admin = feedback_system.auth.is_admin()
+        feedback_count = len(feedback_system.get_section_feedback("Analyst Intelligence", None if is_admin else username))
+        if is_admin:
+            view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+        else:
+            view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+        if st.button(view_label, key="view_feedback_btn_analyst", type="primary", help="View feedback"):
+            feedback_system.show_feedback_viewer_modal("Analyst Intelligence")
+    
     st.markdown("**Strategic market insights from industry analyst interactions**")
     
     # Filter to analyst insights only
@@ -60,7 +78,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 1: FIRM ANALYSIS =====
     with tab1:
-        st.subheader("Analyst Firm Analysis")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("Analyst Firm Analysis")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_firm_analysis", type="primary"):
+                feedback_system.show_feedback_modal("Analyst Intelligence > Firm Analysis", "Analyst Intelligence", "Firm Analysis", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Analyst Intelligence > Firm Analysis", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_firm_analysis", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Analyst Intelligence > Firm Analysis")
+        
         st.markdown("*Compare perspectives across different analyst firms*")
         
         # Firm distribution
@@ -174,7 +209,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 2: ANALYST PROFILES =====
     with tab2:
-        st.subheader("Individual Analyst Profiles")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("Individual Analyst Profiles")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_analyst_profiles", type="primary"):
+                feedback_system.show_feedback_modal("Analyst Intelligence > Analyst Profiles", "Analyst Intelligence", "Analyst Profiles", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Analyst Intelligence > Analyst Profiles", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_analyst_profiles", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Analyst Intelligence > Analyst Profiles")
+        
         st.markdown("*Track sentiment and focus areas by individual analyst*")
         
         # Analyst distribution
@@ -275,7 +327,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 3: SENTIMENT TRENDS =====
     with tab3:
-        st.subheader("Sentiment Trends Over Time")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("Sentiment Trends Over Time")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_sentiment_trends", type="primary"):
+                feedback_system.show_feedback_modal("Analyst Intelligence > Sentiment Trends", "Analyst Intelligence", "Sentiment Trends", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Analyst Intelligence > Sentiment Trends", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_sentiment_trends", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Analyst Intelligence > Sentiment Trends")
+        
         st.markdown("*How has analyst sentiment evolved?*")
         
         # Time series analysis
@@ -357,7 +426,24 @@ def render(filtered_df, full_df):
     
     # ===== TAB 4: KEY INSIGHTS =====
     with tab4:
-        st.subheader("Key Analyst Insights")
+        # Subtab header with inline feedback buttons
+        col1, col2, col3 = st.columns([8, 1.2, 1.2])
+        with col1:
+            st.subheader("Key Analyst Insights")
+        with col2:
+            if st.button("💬 Feedback", key="feedback_btn_key_analyst_insights", type="primary"):
+                feedback_system.show_feedback_modal("Analyst Intelligence > Key Insights", "Analyst Intelligence", "Key Insights", "")
+        with col3:
+            username = feedback_system.auth.get_current_user()
+            is_admin = feedback_system.auth.is_admin()
+            feedback_count = len(feedback_system.get_section_feedback("Analyst Intelligence > Key Insights", None if is_admin else username))
+            if is_admin:
+                view_label = f"All Feedbacks ({feedback_count})" if feedback_count > 0 else "All Feedbacks (0)"
+            else:
+                view_label = f"My Feedbacks ({feedback_count})" if feedback_count > 0 else "My Feedbacks (0)"
+            if st.button(view_label, key="view_feedback_btn_key_analyst_insights", type="primary", help="View feedback"):
+                feedback_system.show_feedback_viewer_modal("Analyst Intelligence > Key Insights")
+        
         st.markdown("*Highlighted observations from analyst interactions*")
         
         # Most recent insights
