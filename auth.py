@@ -63,6 +63,21 @@ def init_session_state():
         st.session_state.username = None
     if 'user_role' not in st.session_state:
         st.session_state.user_role = None
+    
+    # Check for username in query parameters for auto-login
+    if not st.session_state.authenticated:
+        query_params = st.query_params
+        if 'user' in query_params:
+            username = query_params['user']
+            if username:
+                # Auto-login with appropriate role
+                role = determine_user_role(username)
+                passwords = get_passwords()
+                # Use the role-appropriate password for auto-login
+                auto_login_success, _ = login(username, passwords[role])
+                if auto_login_success:
+                    # Clear the query parameter after successful auto-login
+                    st.query_params.clear()
 
 def login(username: str, password: str) -> tuple[bool, Optional[str]]:
     """
@@ -122,6 +137,10 @@ def render_login_page():
     with col2:
         st.markdown("# 🔐 Login")
         st.markdown("### HCM Market Intelligence Platform")
+        
+        # Show info about URL parameter login
+        st.info("💡 **Tip:** You can auto-login by adding `?user=your.username` to the URL")
+        
         st.markdown("---")
         
         with st.form("login_form"):
